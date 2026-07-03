@@ -26,3 +26,10 @@ PostgreSQL 16.
 
 cargosphere
 
+## Neon Setup Status
+
+Project:
+
+```text
+cargosphere
+
