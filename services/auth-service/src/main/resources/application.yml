@@ -14,16 +14,17 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: none
+      ddl-auto: validate
     properties:
       hibernate:
         default_schema: auth_schema
         format_sql: true
 
   flyway:
-    enabled: false
+    enabled: true
     default-schema: auth_schema
     schemas: auth_schema
+    locations: classpath:db/migration
 
 management:
   endpoints:
