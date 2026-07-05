@@ -1,0 +1,37 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: shipment-service
+
+  datasource:
+    url: ${SHIPMENT_DB_URL}
+    username: ${SHIPMENT_DB_USERNAME}
+    password: ${SHIPMENT_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: shipment_schema
+        format_sql: true
+
+  flyway:
+    enabled: true
+    default-schema: shipment_schema
+    schemas: shipment_schema
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+  endpoint:
+    health:
+      show-details: never
