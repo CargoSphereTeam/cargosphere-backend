@@ -45,3 +45,9 @@ eureka:
 
   instance:
     prefer-ip-address: true
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    issuer: ${JWT_ISSUER:cargosphere-auth-service}
+    expiration: ${JWT_EXPIRATION:PT1H}

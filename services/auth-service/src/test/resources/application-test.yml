@@ -23,3 +23,9 @@ spring:
 eureka:
   client:
     enabled: false
+
+app:
+  jwt:
+    secret: Y2FyZ29zcGhlcmUtdGVzdC1qd3Qtc2VjcmV0LWtleSE=
+    issuer: cargosphere-auth-service
+    expiration: PT1H

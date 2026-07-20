@@ -22,16 +22,23 @@ public final class AuthMapper {
         );
     }
 
-    public static LoginResponse toLoginResponse(User user) {
-        return new LoginResponse(
-                user.getId(),
-                user.getFullName(),
-                user.getEmail(),
-                user.getRole().getName(),
-                user.getStatus().name(),
-                "Login successful"
-        );
-    }
+public static LoginResponse toLoginResponse(
+        User user,
+        String accessToken,
+        long expiresIn
+) {
+    return new LoginResponse(
+            user.getId(),
+            user.getFullName(),
+            user.getEmail(),
+            user.getRole().getName(),
+            user.getStatus().name(),
+            accessToken,
+            "Bearer",
+            expiresIn,
+            "Login successful"
+    );
+}
 
     public static UserResponse toUserResponse(User user) {
         return new UserResponse(
