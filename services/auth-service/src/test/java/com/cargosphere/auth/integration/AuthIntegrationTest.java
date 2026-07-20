@@ -55,7 +55,7 @@ class AuthIntegrationTest {
         Long userId = registerResponse.get("id").asLong();
 
         assertThat(registerResponse.get("email").asText()).isEqualTo(email);
-        assertThat(registerResponse.get("role").asText()).isEqualTo("ROLE_CUSTOMER");
+        assertThat(registerResponse.get("role").asText()).isEqualTo("ROLE_CLIENT");
         assertThat(registerResponse.get("status").asText()).isEqualTo("ACTIVE");
 
         LoginRequest loginRequest = new LoginRequest(

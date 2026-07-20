@@ -28,7 +28,7 @@ import java.util.List;
 @Transactional
 public class AuthServiceImpl implements AuthService {
 
-    private static final String DEFAULT_ROLE = "ROLE_CUSTOMER";
+    private static final String DEFAULT_ROLE = "ROLE_CLIENT";
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;

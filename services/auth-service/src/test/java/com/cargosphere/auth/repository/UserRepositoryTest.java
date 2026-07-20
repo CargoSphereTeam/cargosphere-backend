@@ -27,7 +27,7 @@ class UserRepositoryTest {
 
     @Test
     void shouldSaveAndFindUserByEmail() {
-        Role customerRole = roleRepository.findByName("ROLE_CUSTOMER")
+        Role customerRole = roleRepository.findByName("ROLE_CLIENT")
                 .orElseThrow();
 
         String uniqueEmail = "repo-test-" + UUID.randomUUID() + "@example.com";
@@ -46,12 +46,12 @@ class UserRepositoryTest {
 
         assertThat(foundUser).isPresent();
         assertThat(foundUser.get().getEmail()).isEqualTo(uniqueEmail);
-        assertThat(foundUser.get().getRole().getName()).isEqualTo("ROLE_CUSTOMER");
+        assertThat(foundUser.get().getRole().getName()).isEqualTo("ROLE_CLIENT");
     }
 
     @Test
     void existsByEmailShouldReturnTrueWhenEmailExists() {
-        Role customerRole = roleRepository.findByName("ROLE_CUSTOMER")
+        Role customerRole = roleRepository.findByName("ROLE_CLIENT")
                 .orElseThrow();
 
         String uniqueEmail = "exists-test-" + UUID.randomUUID() + "@example.com";

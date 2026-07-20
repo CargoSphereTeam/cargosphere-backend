@@ -47,7 +47,7 @@ class AuthControllerTest {
                 "Dnyanesh Gholap",
                 "dnyanesh@example.com",
                 "9876543210",
-                "ROLE_CUSTOMER",
+                "ROLE_CLIENT",
                 "ACTIVE",
                 LocalDateTime.now()
         );
@@ -66,7 +66,7 @@ class AuthControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.email").value("dnyanesh@example.com"))
-                .andExpect(jsonPath("$.role").value("ROLE_CUSTOMER"));
+                .andExpect(jsonPath("$.role").value("ROLE_CLIENT"));
     }
 
     @Test
@@ -93,7 +93,7 @@ class AuthControllerTest {
                 1L,
                 "Dnyanesh Gholap",
                 "dnyanesh@example.com",
-                "ROLE_CUSTOMER",
+                "ROLE_CLIENT",
                 "ACTIVE",
                 "Login successful"
         );
@@ -120,7 +120,7 @@ class AuthControllerTest {
                 "Dnyanesh Gholap",
                 "dnyanesh@example.com",
                 "9876543210",
-                "ROLE_CUSTOMER",
+                "ROLE_CLIENT",
                 "ACTIVE",
                 LocalDateTime.now(),
                 LocalDateTime.now()
