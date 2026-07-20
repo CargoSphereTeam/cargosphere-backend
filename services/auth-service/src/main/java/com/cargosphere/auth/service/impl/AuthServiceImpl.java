@@ -16,6 +16,7 @@ import com.cargosphere.auth.mapper.AuthMapper;
 import com.cargosphere.auth.repository.RoleRepository;
 import com.cargosphere.auth.repository.UserRepository;
 import com.cargosphere.auth.service.AuthService;
+import com.cargosphere.auth.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
     @Override
     public RegisterResponse register(RegisterRequest request) {
@@ -59,23 +61,41 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public LoginResponse login(LoginRequest request) {
-        String normalizedEmail = request.email().trim().toLowerCase();
+@Transactional(readOnly = true)
+public LoginResponse login(LoginRequest request) {
+    String normalizedEmail = request.email().trim().toLowerCase();
 
-        User user = userRepository.findByEmail(normalizedEmail)
-                .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
+    User user = userRepository.findByEmail(normalizedEmail)
+            .orElseThrow(() ->
+                    new InvalidCredentialsException(
+                            "Invalid email or password"
+                    )
+            );
 
-        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new InvalidCredentialsException("Invalid email or password");
-        }
-
-        if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new AccountNotActiveException("User account is not active");
-        }
-
-        return AuthMapper.toLoginResponse(user);
+    if (!passwordEncoder.matches(
+            request.password(),
+            user.getPasswordHash()
+    )) {
+        throw new InvalidCredentialsException(
+                "Invalid email or password"
+        );
     }
+
+    if (user.getStatus() != UserStatus.ACTIVE) {
+        throw new AccountNotActiveException(
+                "User account is not active"
+        );
+    }
+
+    JwtService.GeneratedToken token =
+            jwtService.generateToken(user);
+
+    return AuthMapper.toLoginResponse(
+            user,
+            token.value(),
+            token.expiresInSeconds()
+    );
+}    
 
     @Override
     @Transactional(readOnly = true)
