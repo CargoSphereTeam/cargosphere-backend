@@ -1,0 +1,304 @@
+{
+  "info": {
+    "_postman_id": "7f61ad43-82cb-40c8-b6d5-8280797523ba",
+    "name": "CargoSphere Shipment Service",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "56741413",
+    "_collection_link": "https://go.postman.co/collection/56741413-7f61ad43-82cb-40c8-b6d5-8280797523ba?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"service\": \"shipment-service\",\r\n  \"status\": \"UP\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8082/api/shipments/health",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8082",
+          "path": [
+            "api",
+            "shipments",
+            "health"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create Shipment",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"clientUserId\": 1,\r\n  \"originLocation\": \"Mumbai\",\r\n  \"destinationLocation\": \"Pune\",\r\n  \"shipmentType\": \"ROAD\",\r\n  \"expectedPickupDate\": \"2026-08-01\",\r\n  \"expectedDeliveryDate\": \"2026-08-05\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:8082/api/shipments",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8082",
+          "path": [
+            "api",
+            "shipments"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Shipment By ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/shipments/4",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "shipments",
+            "4"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Add Cargo Detail",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"cargoName\": \"Electronics Box\",\r\n  \"cargoDescription\": \"Laptop accessories\",\r\n  \"cargoType\": \"ELECTRONICS\",\r\n  \"weightKg\": 25.50,\r\n  \"volumeCbm\": 1.20,\r\n  \"quantity\": 2,\r\n  \"fragile\": true,\r\n  \"hazardous\": false\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/shipments/4/cargo-details",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "shipments",
+            "4",
+            "cargo-details"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Cargo Details",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/shipments/4/cargo-details",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "shipments",
+            "4",
+            "cargo-details"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Update Shipment Status",
+      "request": {
+        "method": "PATCH",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"status\": \"IN_TRANSIT\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/shipments/4/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "shipments",
+            "4",
+            "status"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Shipment Events",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/shipments/4/events",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "shipments",
+            "4",
+            "events"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create Shipment Validation Error",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n  \"clientUserId\": null,\r\n  \"originLocation\": \"\",\r\n  \"destinationLocation\": \"\",\r\n  \"shipmentType\": null\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/shipments",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "shipments"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Actuator Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8082/actuator/health",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8082",
+          "path": [
+            "actuator",
+            "health"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get All Shipments",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/shipments",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "shipments"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Not Found Error Test",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/shipments/999",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "shipments",
+            "999"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": ""
+    }
+  ]
+}
