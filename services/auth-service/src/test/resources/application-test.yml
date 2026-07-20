@@ -19,3 +19,7 @@ spring:
     default-schema: auth_schema
     schemas: auth_schema
     locations: classpath:db/migration
+
+eureka:
+  client:
+    enabled: false
