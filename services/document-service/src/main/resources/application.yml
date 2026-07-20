@@ -1,0 +1,37 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: document-service
+
+  datasource:
+    url: ${DOCUMENT_DB_URL}
+    username: ${DOCUMENT_DB_USERNAME}
+    password: ${DOCUMENT_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: document_schema
+        format_sql: true
+
+  flyway:
+    enabled: true
+    default-schema: document_schema
+    schemas: document_schema
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+  endpoint:
+    health:
+      show-details: never
