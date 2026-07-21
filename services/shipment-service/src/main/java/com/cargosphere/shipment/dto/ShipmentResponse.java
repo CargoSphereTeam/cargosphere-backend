@@ -5,7 +5,7 @@ import com.cargosphere.shipment.entity.enums.ShipmentType;
 import lombok.*;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 @Getter
 @Setter
@@ -32,7 +32,6 @@ public class ShipmentResponse {
 
     private LocalDate expectedDeliveryDate;
 
-    private LocalDateTime createdAt;
-
-    private LocalDateTime updatedAt;
+    private OffsetDateTime createdAt;
+    private OffsetDateTime updatedAt;
 }

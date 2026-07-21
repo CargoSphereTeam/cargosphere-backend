@@ -1,7 +1,12 @@
 package com.cargosphere.shipment.controller;
 
 import com.cargosphere.shipment.config.CorsConfig;
-import com.cargosphere.shipment.dto.*;
+import com.cargosphere.shipment.dto.CargoDetailRequest;
+import com.cargosphere.shipment.dto.CargoDetailResponse;
+import com.cargosphere.shipment.dto.CreateShipmentRequest;
+import com.cargosphere.shipment.dto.ShipmentEventResponse;
+import com.cargosphere.shipment.dto.ShipmentResponse;
+import com.cargosphere.shipment.dto.UpdateShipmentStatusRequest;
 import com.cargosphere.shipment.entity.enums.CargoType;
 import com.cargosphere.shipment.entity.enums.ShipmentEventType;
 import com.cargosphere.shipment.entity.enums.ShipmentStatus;
@@ -21,13 +26,20 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ShipmentController.class)
 @Import(CorsConfig.class)
@@ -53,6 +65,17 @@ class ShipmentControllerTest {
                 .expectedDeliveryDate(LocalDate.of(2026, 8, 5))
                 .build();
 
+        OffsetDateTime timestamp = OffsetDateTime.of(
+                2026,
+                7,
+                19,
+                10,
+                30,
+                0,
+                0,
+                ZoneOffset.UTC
+        );
+
         ShipmentResponse response = ShipmentResponse.builder()
                 .id(1L)
                 .shipmentNumber("CS-20260719-ABC12345")
@@ -63,8 +86,8 @@ class ShipmentControllerTest {
                 .status(ShipmentStatus.CREATED)
                 .expectedPickupDate(LocalDate.of(2026, 8, 1))
                 .expectedDeliveryDate(LocalDate.of(2026, 8, 5))
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
+                .createdAt(timestamp)
+                .updatedAt(timestamp)
                 .build();
 
         when(shipmentService.createShipment(any(CreateShipmentRequest.class)))
