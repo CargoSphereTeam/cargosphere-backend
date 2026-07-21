@@ -6,6 +6,7 @@ import com.cargosphere.shipment.entity.Shipment;
 import com.cargosphere.shipment.entity.ShipmentEvent;
 import com.cargosphere.shipment.entity.enums.ShipmentEventType;
 import com.cargosphere.shipment.entity.enums.ShipmentStatus;
+import com.cargosphere.shipment.exception.InvalidShipmentOperationException;
 import com.cargosphere.shipment.exception.ResourceNotFoundException;
 import com.cargosphere.shipment.mapper.CargoDetailMapper;
 import com.cargosphere.shipment.mapper.ShipmentEventMapper;
@@ -36,6 +37,8 @@ public class ShipmentServiceImpl implements ShipmentService {
 
     @Override
     public ShipmentResponse createShipment(CreateShipmentRequest request) {
+        validateShipmentCreation(request);
+
         String shipmentNumber = generateShipmentNumber();
 
         Shipment shipment = shipmentMapper.toEntity(request, shipmentNumber);
@@ -88,8 +91,13 @@ public class ShipmentServiceImpl implements ShipmentService {
     }
 
     @Override
-    public CargoDetailResponse addCargoDetail(Long shipmentId, CargoDetailRequest request) {
+    public CargoDetailResponse addCargoDetail(
+            Long shipmentId,
+            CargoDetailRequest request
+    ) {
         Shipment shipment = findShipmentById(shipmentId);
+
+        validateCargoAddition(shipment);
 
         CargoDetail cargoDetail = cargoDetailMapper.toEntity(request, shipment);
         CargoDetail savedCargoDetail = cargoDetailRepository.save(cargoDetail);
@@ -116,8 +124,16 @@ public class ShipmentServiceImpl implements ShipmentService {
     }
 
     @Override
-    public ShipmentResponse updateShipmentStatus(Long shipmentId, UpdateShipmentStatusRequest request) {
+    public ShipmentResponse updateShipmentStatus(
+            Long shipmentId,
+            UpdateShipmentStatusRequest request
+    ) {
         Shipment shipment = findShipmentById(shipmentId);
+
+        validateStatusTransition(
+                shipment.getStatus(),
+                request.getStatus()
+        );
 
         shipment.setStatus(request.getStatus());
 
@@ -135,10 +151,13 @@ public class ShipmentServiceImpl implements ShipmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ShipmentEventResponse> getShipmentEventsByShipmentId(Long shipmentId) {
+    public List<ShipmentEventResponse> getShipmentEventsByShipmentId(
+            Long shipmentId
+    ) {
         findShipmentById(shipmentId);
 
-        return shipmentEventRepository.findByShipment_IdOrderByEventTimeDesc(shipmentId)
+        return shipmentEventRepository
+                .findByShipment_IdOrderByEventTimeDesc(shipmentId)
                 .stream()
                 .map(shipmentEventMapper::toResponse)
                 .toList();
@@ -149,6 +168,81 @@ public class ShipmentServiceImpl implements ShipmentService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Shipment not found with id: " + shipmentId
                 ));
+    }
+
+    private void validateShipmentCreation(CreateShipmentRequest request) {
+        if (request.getOriginLocation()
+                .trim()
+                .equalsIgnoreCase(request.getDestinationLocation().trim())) {
+
+            throw new InvalidShipmentOperationException(
+                    "Origin and destination locations cannot be the same"
+            );
+        }
+
+        if (request.getExpectedPickupDate() != null
+                && request.getExpectedDeliveryDate() != null
+                && request.getExpectedDeliveryDate()
+                .isBefore(request.getExpectedPickupDate())) {
+
+            throw new InvalidShipmentOperationException(
+                    "Expected delivery date cannot be before expected pickup date"
+            );
+        }
+    }
+
+    private void validateCargoAddition(Shipment shipment) {
+        ShipmentStatus currentStatus = shipment.getStatus();
+
+        if (currentStatus != ShipmentStatus.CREATED
+                && currentStatus != ShipmentStatus.BOOKED) {
+
+            throw new InvalidShipmentOperationException(
+                    "Cargo cannot be added when shipment status is "
+                            + currentStatus
+            );
+        }
+    }
+
+    private void validateStatusTransition(
+            ShipmentStatus currentStatus,
+            ShipmentStatus requestedStatus
+    ) {
+        if (requestedStatus == null) {
+            throw new InvalidShipmentOperationException(
+                    "Shipment status is required"
+            );
+        }
+
+        if (currentStatus == requestedStatus) {
+            throw new InvalidShipmentOperationException(
+                    "Shipment is already in status " + currentStatus
+            );
+        }
+
+        boolean validTransition = switch (currentStatus) {
+            case CREATED ->
+                    requestedStatus == ShipmentStatus.BOOKED
+                            || requestedStatus == ShipmentStatus.CANCELLED;
+
+            case BOOKED ->
+                    requestedStatus == ShipmentStatus.IN_TRANSIT
+                            || requestedStatus == ShipmentStatus.CANCELLED;
+
+            case IN_TRANSIT ->
+                    requestedStatus == ShipmentStatus.DELIVERED;
+
+            case DELIVERED, CANCELLED -> false;
+        };
+
+        if (!validTransition) {
+            throw new InvalidShipmentOperationException(
+                    "Invalid shipment status transition from "
+                            + currentStatus
+                            + " to "
+                            + requestedStatus
+            );
+        }
     }
 
     private void createShipmentEvent(
@@ -178,14 +272,18 @@ public class ShipmentServiceImpl implements ShipmentService {
     }
 
     private String generateShipmentNumber() {
-        String datePart = LocalDate.now().toString().replace("-", "");
+        String datePart = LocalDate.now()
+                .toString()
+                .replace("-", "");
+
         String randomPart = UUID.randomUUID()
                 .toString()
                 .replace("-", "")
                 .substring(0, 8)
                 .toUpperCase();
 
-        String shipmentNumber = "CS-" + datePart + "-" + randomPart;
+        String shipmentNumber =
+                "CS-" + datePart + "-" + randomPart;
 
         while (shipmentRepository.existsByShipmentNumber(shipmentNumber)) {
             randomPart = UUID.randomUUID()
@@ -194,7 +292,8 @@ public class ShipmentServiceImpl implements ShipmentService {
                     .substring(0, 8)
                     .toUpperCase();
 
-            shipmentNumber = "CS-" + datePart + "-" + randomPart;
+            shipmentNumber =
+                    "CS-" + datePart + "-" + randomPart;
         }
 
         return shipmentNumber;

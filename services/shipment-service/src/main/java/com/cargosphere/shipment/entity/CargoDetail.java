@@ -40,10 +40,19 @@ public class CargoDetail {
     @Column(name = "cargo_type", length = 50)
     private CargoType cargoType;
 
-    @Column(name = "weight_kg", nullable = false, precision = 12, scale = 2)
+    @Column(
+            name = "weight_kg",
+            nullable = false,
+            precision = 13,
+            scale = 3
+    )
     private BigDecimal weightKg;
 
-    @Column(name = "volume_cbm", precision = 12, scale = 2)
+    @Column(
+            name = "volume_cbm",
+            precision = 13,
+            scale = 3
+    )
     private BigDecimal volumeCbm;
 
     @Builder.Default
