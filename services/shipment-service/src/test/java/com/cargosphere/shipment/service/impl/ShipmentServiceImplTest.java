@@ -31,13 +31,22 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ShipmentServiceImplTest {
@@ -79,9 +88,14 @@ class ShipmentServiceImplTest {
         when(shipmentRepository.save(any(Shipment.class)))
                 .thenAnswer(invocation -> {
                     Shipment shipment = invocation.getArgument(0);
+
+                    OffsetDateTime timestamp =
+                            OffsetDateTime.now(ZoneOffset.UTC);
+
                     shipment.setId(1L);
-                    shipment.setCreatedAt(LocalDateTime.now());
-                    shipment.setUpdatedAt(LocalDateTime.now());
+                    shipment.setCreatedAt(timestamp);
+                    shipment.setUpdatedAt(timestamp);
+
                     return shipment;
                 });
 
@@ -92,7 +106,8 @@ class ShipmentServiceImplTest {
                     return event;
                 });
 
-        ShipmentResponse response = shipmentService.createShipment(request);
+        ShipmentResponse response =
+                shipmentService.createShipment(request);
 
         assertNotNull(response);
         assertEquals(1L, response.getId());
@@ -110,21 +125,36 @@ class ShipmentServiceImplTest {
 
         ShipmentEvent savedEvent = eventCaptor.getValue();
 
-        assertEquals(ShipmentEventType.CREATED, savedEvent.getEventType());
-        assertEquals("Shipment created", savedEvent.getEventDescription());
-        assertEquals("Mumbai", savedEvent.getEventLocation());
-        assertEquals(1L, savedEvent.getShipment().getId());
+        assertEquals(
+                ShipmentEventType.CREATED,
+                savedEvent.getEventType()
+        );
+        assertEquals(
+                "Shipment created",
+                savedEvent.getEventDescription()
+        );
+        assertEquals(
+                "Mumbai",
+                savedEvent.getEventLocation()
+        );
+        assertEquals(
+                1L,
+                savedEvent.getShipment().getId()
+        );
     }
 
     @Test
     void createShipmentShouldRejectSameOriginAndDestination() {
-        CreateShipmentRequest request = createValidShipmentRequest();
+        CreateShipmentRequest request =
+                createValidShipmentRequest();
+
         request.setDestinationLocation("  MUMBAI  ");
 
-        InvalidShipmentOperationException exception = assertThrows(
-                InvalidShipmentOperationException.class,
-                () -> shipmentService.createShipment(request)
-        );
+        InvalidShipmentOperationException exception =
+                assertThrows(
+                        InvalidShipmentOperationException.class,
+                        () -> shipmentService.createShipment(request)
+                );
 
         assertEquals(
                 "Origin and destination locations cannot be the same",
@@ -140,15 +170,22 @@ class ShipmentServiceImplTest {
 
     @Test
     void createShipmentShouldRejectDeliveryDateBeforePickupDate() {
-        CreateShipmentRequest request = createValidShipmentRequest();
+        CreateShipmentRequest request =
+                createValidShipmentRequest();
 
-        request.setExpectedPickupDate(LocalDate.now().plusDays(10));
-        request.setExpectedDeliveryDate(LocalDate.now().plusDays(5));
-
-        InvalidShipmentOperationException exception = assertThrows(
-                InvalidShipmentOperationException.class,
-                () -> shipmentService.createShipment(request)
+        request.setExpectedPickupDate(
+                LocalDate.now().plusDays(10)
         );
+
+        request.setExpectedDeliveryDate(
+                LocalDate.now().plusDays(5)
+        );
+
+        InvalidShipmentOperationException exception =
+                assertThrows(
+                        InvalidShipmentOperationException.class,
+                        () -> shipmentService.createShipment(request)
+                );
 
         assertEquals(
                 "Expected delivery date cannot be before expected pickup date",
@@ -164,12 +201,14 @@ class ShipmentServiceImplTest {
 
     @Test
     void getShipmentByIdShouldReturnShipmentWhenExists() {
-        Shipment shipment = createSampleShipment(ShipmentStatus.CREATED);
+        Shipment shipment =
+                createSampleShipment(ShipmentStatus.CREATED);
 
         when(shipmentRepository.findById(1L))
                 .thenReturn(Optional.of(shipment));
 
-        ShipmentResponse response = shipmentService.getShipmentById(1L);
+        ShipmentResponse response =
+                shipmentService.getShipmentById(1L);
 
         assertNotNull(response);
         assertEquals(1L, response.getId());
@@ -177,7 +216,10 @@ class ShipmentServiceImplTest {
                 "CS-20260719-ABC12345",
                 response.getShipmentNumber()
         );
-        assertEquals(ShipmentStatus.CREATED, response.getStatus());
+        assertEquals(
+                ShipmentStatus.CREATED,
+                response.getStatus()
+        );
     }
 
     @Test
@@ -185,10 +227,11 @@ class ShipmentServiceImplTest {
         when(shipmentRepository.findById(999L))
                 .thenReturn(Optional.empty());
 
-        ResourceNotFoundException exception = assertThrows(
-                ResourceNotFoundException.class,
-                () -> shipmentService.getShipmentById(999L)
-        );
+        ResourceNotFoundException exception =
+                assertThrows(
+                        ResourceNotFoundException.class,
+                        () -> shipmentService.getShipmentById(999L)
+                );
 
         assertEquals(
                 "Shipment not found with id: 999",
@@ -198,25 +241,34 @@ class ShipmentServiceImplTest {
 
     @Test
     void addCargoDetailShouldSaveCargoDetailAndCreateCargoAddedEvent() {
-        Shipment shipment = createSampleShipment(ShipmentStatus.CREATED);
-        CargoDetailRequest request = createCargoDetailRequest();
+        Shipment shipment =
+                createSampleShipment(ShipmentStatus.CREATED);
+
+        CargoDetailRequest request =
+                createCargoDetailRequest();
 
         when(shipmentRepository.findById(1L))
                 .thenReturn(Optional.of(shipment));
 
         when(cargoDetailRepository.save(any(CargoDetail.class)))
                 .thenAnswer(invocation -> {
-                    CargoDetail cargoDetail = invocation.getArgument(0);
+                    CargoDetail cargoDetail =
+                            invocation.getArgument(0);
+
                     cargoDetail.setId(1L);
                     cargoDetail.setCreatedAt(LocalDateTime.now());
                     cargoDetail.setUpdatedAt(LocalDateTime.now());
+
                     return cargoDetail;
                 });
 
         when(shipmentEventRepository.save(any(ShipmentEvent.class)))
                 .thenAnswer(invocation -> {
-                    ShipmentEvent event = invocation.getArgument(0);
+                    ShipmentEvent event =
+                            invocation.getArgument(0);
+
                     event.setId(2L);
+
                     return event;
                 });
 
@@ -226,8 +278,14 @@ class ShipmentServiceImplTest {
         assertNotNull(response);
         assertEquals(1L, response.getId());
         assertEquals(1L, response.getShipmentId());
-        assertEquals("Electronics Box", response.getCargoName());
-        assertEquals(CargoType.ELECTRONICS, response.getCargoType());
+        assertEquals(
+                "Electronics Box",
+                response.getCargoName()
+        );
+        assertEquals(
+                CargoType.ELECTRONICS,
+                response.getCargoType()
+        );
         assertTrue(response.getFragile());
         assertFalse(response.getHazardous());
 
@@ -236,7 +294,8 @@ class ShipmentServiceImplTest {
 
         verify(shipmentEventRepository).save(eventCaptor.capture());
 
-        ShipmentEvent savedEvent = eventCaptor.getValue();
+        ShipmentEvent savedEvent =
+                eventCaptor.getValue();
 
         assertEquals(
                 ShipmentEventType.CARGO_ADDED,
@@ -246,24 +305,33 @@ class ShipmentServiceImplTest {
                 "Cargo added: Electronics Box",
                 savedEvent.getEventDescription()
         );
-        assertEquals("Mumbai", savedEvent.getEventLocation());
+        assertEquals(
+                "Mumbai",
+                savedEvent.getEventLocation()
+        );
     }
 
     @Test
     void addCargoDetailShouldRejectCargoForInTransitShipment() {
-        Shipment shipment = createSampleShipment(
-                ShipmentStatus.IN_TRANSIT
-        );
+        Shipment shipment =
+                createSampleShipment(
+                        ShipmentStatus.IN_TRANSIT
+                );
 
-        CargoDetailRequest request = createCargoDetailRequest();
+        CargoDetailRequest request =
+                createCargoDetailRequest();
 
         when(shipmentRepository.findById(1L))
                 .thenReturn(Optional.of(shipment));
 
-        InvalidShipmentOperationException exception = assertThrows(
-                InvalidShipmentOperationException.class,
-                () -> shipmentService.addCargoDetail(1L, request)
-        );
+        InvalidShipmentOperationException exception =
+                assertThrows(
+                        InvalidShipmentOperationException.class,
+                        () -> shipmentService.addCargoDetail(
+                                1L,
+                                request
+                        )
+                );
 
         assertEquals(
                 "Cargo cannot be added when shipment status is IN_TRANSIT",
@@ -279,7 +347,8 @@ class ShipmentServiceImplTest {
 
     @Test
     void updateShipmentStatusShouldAllowCreatedToBooked() {
-        Shipment shipment = createSampleShipment(ShipmentStatus.CREATED);
+        Shipment shipment =
+                createSampleShipment(ShipmentStatus.CREATED);
 
         UpdateShipmentStatusRequest request =
                 UpdateShipmentStatusRequest.builder()
@@ -290,27 +359,39 @@ class ShipmentServiceImplTest {
                 .thenReturn(Optional.of(shipment));
 
         when(shipmentRepository.save(any(Shipment.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+                .thenAnswer(
+                        invocation -> invocation.getArgument(0)
+                );
 
         when(shipmentEventRepository.save(any(ShipmentEvent.class)))
                 .thenAnswer(invocation -> {
-                    ShipmentEvent event = invocation.getArgument(0);
+                    ShipmentEvent event =
+                            invocation.getArgument(0);
+
                     event.setId(3L);
+
                     return event;
                 });
 
         ShipmentResponse response =
-                shipmentService.updateShipmentStatus(1L, request);
+                shipmentService.updateShipmentStatus(
+                        1L,
+                        request
+                );
 
         assertNotNull(response);
-        assertEquals(ShipmentStatus.BOOKED, response.getStatus());
+        assertEquals(
+                ShipmentStatus.BOOKED,
+                response.getStatus()
+        );
 
         ArgumentCaptor<ShipmentEvent> eventCaptor =
                 ArgumentCaptor.forClass(ShipmentEvent.class);
 
         verify(shipmentEventRepository).save(eventCaptor.capture());
 
-        ShipmentEvent savedEvent = eventCaptor.getValue();
+        ShipmentEvent savedEvent =
+                eventCaptor.getValue();
 
         assertEquals(
                 ShipmentEventType.BOOKED,
@@ -324,7 +405,8 @@ class ShipmentServiceImplTest {
 
     @Test
     void updateShipmentStatusShouldRejectSameStatus() {
-        Shipment shipment = createSampleShipment(ShipmentStatus.BOOKED);
+        Shipment shipment =
+                createSampleShipment(ShipmentStatus.BOOKED);
 
         UpdateShipmentStatusRequest request =
                 UpdateShipmentStatusRequest.builder()
@@ -334,24 +416,31 @@ class ShipmentServiceImplTest {
         when(shipmentRepository.findById(1L))
                 .thenReturn(Optional.of(shipment));
 
-        InvalidShipmentOperationException exception = assertThrows(
-                InvalidShipmentOperationException.class,
-                () -> shipmentService.updateShipmentStatus(1L, request)
-        );
+        InvalidShipmentOperationException exception =
+                assertThrows(
+                        InvalidShipmentOperationException.class,
+                        () -> shipmentService.updateShipmentStatus(
+                                1L,
+                                request
+                        )
+                );
 
         assertEquals(
                 "Shipment is already in status BOOKED",
                 exception.getMessage()
         );
 
-        verify(shipmentRepository, never()).save(any(Shipment.class));
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+
         verify(shipmentEventRepository, never())
                 .save(any(ShipmentEvent.class));
     }
 
     @Test
     void updateShipmentStatusShouldRejectCreatedToInTransit() {
-        Shipment shipment = createSampleShipment(ShipmentStatus.CREATED);
+        Shipment shipment =
+                createSampleShipment(ShipmentStatus.CREATED);
 
         UpdateShipmentStatusRequest request =
                 UpdateShipmentStatusRequest.builder()
@@ -361,26 +450,33 @@ class ShipmentServiceImplTest {
         when(shipmentRepository.findById(1L))
                 .thenReturn(Optional.of(shipment));
 
-        InvalidShipmentOperationException exception = assertThrows(
-                InvalidShipmentOperationException.class,
-                () -> shipmentService.updateShipmentStatus(1L, request)
-        );
+        InvalidShipmentOperationException exception =
+                assertThrows(
+                        InvalidShipmentOperationException.class,
+                        () -> shipmentService.updateShipmentStatus(
+                                1L,
+                                request
+                        )
+                );
 
         assertEquals(
                 "Invalid shipment status transition from CREATED to IN_TRANSIT",
                 exception.getMessage()
         );
 
-        verify(shipmentRepository, never()).save(any(Shipment.class));
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+
         verify(shipmentEventRepository, never())
                 .save(any(ShipmentEvent.class));
     }
 
     @Test
     void updateShipmentStatusShouldRejectChangesAfterDelivered() {
-        Shipment shipment = createSampleShipment(
-                ShipmentStatus.DELIVERED
-        );
+        Shipment shipment =
+                createSampleShipment(
+                        ShipmentStatus.DELIVERED
+                );
 
         UpdateShipmentStatusRequest request =
                 UpdateShipmentStatusRequest.builder()
@@ -390,34 +486,42 @@ class ShipmentServiceImplTest {
         when(shipmentRepository.findById(1L))
                 .thenReturn(Optional.of(shipment));
 
-        InvalidShipmentOperationException exception = assertThrows(
-                InvalidShipmentOperationException.class,
-                () -> shipmentService.updateShipmentStatus(1L, request)
-        );
+        InvalidShipmentOperationException exception =
+                assertThrows(
+                        InvalidShipmentOperationException.class,
+                        () -> shipmentService.updateShipmentStatus(
+                                1L,
+                                request
+                        )
+                );
 
         assertEquals(
                 "Invalid shipment status transition from DELIVERED to CANCELLED",
                 exception.getMessage()
         );
 
-        verify(shipmentRepository, never()).save(any(Shipment.class));
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+
         verify(shipmentEventRepository, never())
                 .save(any(ShipmentEvent.class));
     }
 
     @Test
     void getShipmentEventsByShipmentIdShouldReturnShipmentEvents() {
-        Shipment shipment = createSampleShipment(ShipmentStatus.CREATED);
+        Shipment shipment =
+                createSampleShipment(ShipmentStatus.CREATED);
 
-        ShipmentEvent event = ShipmentEvent.builder()
-                .shipment(shipment)
-                .eventType(ShipmentEventType.CREATED)
-                .eventDescription("Shipment created")
-                .eventLocation("Mumbai")
-                .eventTime(LocalDateTime.now())
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
+        ShipmentEvent event =
+                ShipmentEvent.builder()
+                        .shipment(shipment)
+                        .eventType(ShipmentEventType.CREATED)
+                        .eventDescription("Shipment created")
+                        .eventLocation("Mumbai")
+                        .eventTime(LocalDateTime.now())
+                        .createdAt(LocalDateTime.now())
+                        .updatedAt(LocalDateTime.now())
+                        .build();
 
         event.setId(1L);
 
@@ -429,7 +533,8 @@ class ShipmentServiceImplTest {
                 .thenReturn(List.of(event));
 
         List<ShipmentEventResponse> responses =
-                shipmentService.getShipmentEventsByShipmentId(1L);
+                shipmentService
+                        .getShipmentEventsByShipmentId(1L);
 
         assertEquals(1, responses.size());
         assertEquals(
@@ -448,8 +553,12 @@ class ShipmentServiceImplTest {
                 .originLocation("Mumbai")
                 .destinationLocation("Pune")
                 .shipmentType(ShipmentType.ROAD)
-                .expectedPickupDate(LocalDate.now().plusDays(5))
-                .expectedDeliveryDate(LocalDate.now().plusDays(10))
+                .expectedPickupDate(
+                        LocalDate.now().plusDays(5)
+                )
+                .expectedDeliveryDate(
+                        LocalDate.now().plusDays(10)
+                )
                 .build();
     }
 
@@ -466,7 +575,12 @@ class ShipmentServiceImplTest {
                 .build();
     }
 
-    private Shipment createSampleShipment(ShipmentStatus status) {
+    private Shipment createSampleShipment(
+            ShipmentStatus status
+    ) {
+        OffsetDateTime timestamp =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
         Shipment shipment = Shipment.builder()
                 .shipmentNumber("CS-20260719-ABC12345")
                 .clientUserId(1L)
@@ -474,10 +588,14 @@ class ShipmentServiceImplTest {
                 .destinationLocation("Pune")
                 .shipmentType(ShipmentType.ROAD)
                 .status(status)
-                .expectedPickupDate(LocalDate.now().plusDays(5))
-                .expectedDeliveryDate(LocalDate.now().plusDays(10))
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
+                .expectedPickupDate(
+                        LocalDate.now().plusDays(5)
+                )
+                .expectedDeliveryDate(
+                        LocalDate.now().plusDays(10)
+                )
+                .createdAt(timestamp)
+                .updatedAt(timestamp)
                 .build();
 
         shipment.setId(1L);
