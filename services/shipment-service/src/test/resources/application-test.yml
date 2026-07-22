@@ -1,0 +1,8 @@
+app:
+  jwt:
+    secret: Y2FyZ29zcGhlcmUtdGVzdC1qd3Qtc2VjcmV0LWtleSE=
+    issuer: cargosphere-auth-service
+
+eureka:
+  client:
+    enabled: false

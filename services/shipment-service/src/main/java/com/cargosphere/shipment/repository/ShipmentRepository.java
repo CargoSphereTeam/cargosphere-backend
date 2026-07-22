@@ -21,4 +21,14 @@ public interface ShipmentRepository extends JpaRepository<Shipment, Long> {
     List<Shipment> findByShipmentType(ShipmentType shipmentType);
 
     List<Shipment> findByClientUserIdAndStatus(Long clientUserId, ShipmentStatus status);
+
+	boolean existsByIdAndClientUserId(
+        Long id,
+        Long clientUserId
+);
+
+boolean existsByShipmentNumberAndClientUserId(
+        String shipmentNumber,
+        Long clientUserId
+);
 }

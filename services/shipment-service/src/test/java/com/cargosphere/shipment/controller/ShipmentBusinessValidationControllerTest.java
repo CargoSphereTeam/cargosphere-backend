@@ -8,6 +8,8 @@ import com.cargosphere.shipment.entity.enums.ShipmentStatus;
 import com.cargosphere.shipment.entity.enums.ShipmentType;
 import com.cargosphere.shipment.exception.InvalidShipmentOperationException;
 import com.cargosphere.shipment.service.ShipmentService;
+import com.cargosphere.shipment.config.CorsConfig;
+import com.cargosphere.shipment.config.SecurityConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,8 +28,19 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.context.annotation.Import;
 
 @WebMvcTest(ShipmentController.class)
+@Import({
+        CorsConfig.class,
+        SecurityConfig.class
+})
+@WithMockUser(
+        username = "admin@cargosphere.com",
+        roles = "ADMIN"
+)
 class ShipmentBusinessValidationControllerTest {
 
     @Autowired
@@ -38,6 +51,9 @@ class ShipmentBusinessValidationControllerTest {
 
     @MockitoBean
     private ShipmentService shipmentService;
+
+    @MockitoBean
+    private JwtDecoder jwtDecoder;
 
     @Test
     void createShipmentShouldReturnBadRequestForInvalidDateOrder()
