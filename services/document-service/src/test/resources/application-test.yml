@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: ${DOCUMENT_TEST_DB_URL}
+    username: ${DOCUMENT_TEST_DB_USERNAME}
+    password: ${DOCUMENT_TEST_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: document_schema
+        format_sql: true
+
+  flyway:
+    enabled: true
+    default-schema: document_schema
+    schemas: document_schema
+    locations: classpath:db/migration
