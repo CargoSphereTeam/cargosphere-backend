@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: ${CONTAINER_TEST_DB_URL}
+    username: ${CONTAINER_TEST_DB_USERNAME}
+    password: ${CONTAINER_TEST_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: container_schema
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    default-schema: container_schema
+    schemas: container_schema
+    create-schemas: true
+    locations: classpath:db/migration
+
+logging:
+  level:
+    org.hibernate.SQL: WARN
