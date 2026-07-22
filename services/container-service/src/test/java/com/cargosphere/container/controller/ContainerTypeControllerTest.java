@@ -6,15 +6,19 @@ import com.cargosphere.container.exception.DuplicateResourceException;
 import com.cargosphere.container.exception.GlobalExceptionHandler;
 import com.cargosphere.container.exception.ResourceNotFoundException;
 import com.cargosphere.container.service.ContainerTypeService;
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import com.cargosphere.container.config.SecurityConfig;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.test.context.support.WithAnonymousUser;
+import org.springframework.security.test.context.support.WithMockUser;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -27,7 +31,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(ContainerTypeController.class)
-@Import(GlobalExceptionHandler.class)
+@Import({
+        GlobalExceptionHandler.class,
+        SecurityConfig.class
+})
+@WithMockUser(
+        username = "admin@cargosphere.com",
+        roles = "ADMIN"
+)
 class ContainerTypeControllerTest {
 
     @Autowired
@@ -38,6 +49,9 @@ class ContainerTypeControllerTest {
 
     @MockitoBean
     private ContainerTypeService containerTypeService;
+
+    @MockitoBean
+    private JwtDecoder jwtDecoder;
 
     private ContainerTypeRequest validRequest;
     private ContainerTypeResponse response;
@@ -234,4 +248,46 @@ class ContainerTypeControllerTest {
                 .andExpect(status().isNoContent())
                 .andExpect(content().string(""));
     }
+
+@Test
+@WithMockUser(
+        username = "client@example.com",
+        roles = "CLIENT"
+)
+void clientShouldGetAllContainerTypes() throws Exception {
+    when(containerTypeService.getAllContainerTypes())
+            .thenReturn(List.of(response));
+
+    mockMvc.perform(get("/api/container-types"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isArray())
+            .andExpect(jsonPath("$[0].typeCode").value("20GP"));
+}
+
+@Test
+@WithMockUser(
+        username = "client@example.com",
+        roles = "CLIENT"
+)
+void clientShouldNotCreateContainerType() throws Exception {
+    mockMvc.perform(
+                    post("/api/container-types")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(
+                                    objectMapper.writeValueAsString(
+                                            validRequest
+                                    )
+                            )
+            )
+            .andExpect(status().isForbidden());
+}
+
+@Test
+@WithAnonymousUser
+void unauthenticatedUserShouldNotAccessContainerTypes()
+        throws Exception {
+
+    mockMvc.perform(get("/api/container-types"))
+            .andExpect(status().isUnauthorized());
+}
 }

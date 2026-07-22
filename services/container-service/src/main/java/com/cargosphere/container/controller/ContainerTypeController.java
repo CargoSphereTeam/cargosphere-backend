@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
@@ -19,6 +20,7 @@ public class ContainerTypeController {
     private final ContainerTypeService containerTypeService;
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ContainerTypeResponse> createContainerType(
             @Valid @RequestBody ContainerTypeRequest request
     ) {
@@ -31,6 +33,7 @@ public class ContainerTypeController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT')")
     public ResponseEntity<List<ContainerTypeResponse>> getAllContainerTypes() {
         return ResponseEntity.ok(
                 containerTypeService.getAllContainerTypes()
@@ -38,6 +41,7 @@ public class ContainerTypeController {
     }
 
     @GetMapping("/{containerTypeId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT')")
     public ResponseEntity<ContainerTypeResponse> getContainerTypeById(
             @PathVariable Long containerTypeId
     ) {
@@ -47,6 +51,7 @@ public class ContainerTypeController {
     }
 
     @PutMapping("/{containerTypeId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ContainerTypeResponse> updateContainerType(
             @PathVariable Long containerTypeId,
             @Valid @RequestBody ContainerTypeRequest request
@@ -60,6 +65,7 @@ public class ContainerTypeController {
     }
 
     @DeleteMapping("/{containerTypeId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteContainerType(
             @PathVariable Long containerTypeId
     ) {
