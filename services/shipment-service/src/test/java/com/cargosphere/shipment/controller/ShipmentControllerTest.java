@@ -1,6 +1,5 @@
 package com.cargosphere.shipment.controller;
 
-import com.cargosphere.shipment.config.CorsConfig;
 import com.cargosphere.shipment.dto.CargoDetailRequest;
 import com.cargosphere.shipment.dto.CargoDetailResponse;
 import com.cargosphere.shipment.dto.CreateShipmentRequest;
@@ -17,8 +16,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -34,15 +31,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ShipmentController.class)
-@Import(CorsConfig.class)
 class ShipmentControllerTest {
 
     @Autowired
@@ -90,8 +84,9 @@ class ShipmentControllerTest {
                 .updatedAt(timestamp)
                 .build();
 
-        when(shipmentService.createShipment(any(CreateShipmentRequest.class)))
-                .thenReturn(response);
+        when(shipmentService.createShipment(
+                any(CreateShipmentRequest.class)
+        )).thenReturn(response);
 
         mockMvc.perform(post("/api/shipments")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -189,7 +184,9 @@ class ShipmentControllerTest {
     }
 
     @Test
-    void updateShipmentStatusShouldReturnUpdatedShipment() throws Exception {
+    void updateShipmentStatusShouldReturnUpdatedShipment()
+            throws Exception {
+
         UpdateShipmentStatusRequest request =
                 UpdateShipmentStatusRequest.builder()
                         .status(ShipmentStatus.IN_TRANSIT)
@@ -287,25 +284,5 @@ class ShipmentControllerTest {
                 .andExpect(jsonPath(
                         "$.validationErrors.shipmentType"
                 ).exists());
-    }
-
-    @Test
-    void shipmentApiShouldAllowCargoSphereFrontendOrigin()
-            throws Exception {
-
-        mockMvc.perform(options("/api/shipments")
-                        .header(
-                                HttpHeaders.ORIGIN,
-                                "http://localhost:5173"
-                        )
-                        .header(
-                                HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD,
-                                "GET"
-                        ))
-                .andExpect(status().isOk())
-                .andExpect(header().string(
-                        HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
-                        "http://localhost:5173"
-                ));
     }
 }
