@@ -9,6 +9,23 @@ spring:
     gateway:
       server:
         webflux:
+          globalcors:
+            add-to-simple-url-handler-mapping: true
+            cors-configurations:
+              '[/**]':
+                allowedOrigins:
+                  - "http://localhost:5173"
+                allowedMethods:
+                  - GET
+                  - POST
+                  - PUT
+                  - PATCH
+                  - DELETE
+                  - OPTIONS
+                allowedHeaders:
+                  - "*"
+                allowCredentials: true
+
           routes:
             - id: auth-service-route
               uri: lb://auth-service
@@ -19,6 +36,16 @@ spring:
               uri: lb://shipment-service
               predicates:
                 - Path=/api/shipments/**
+
+            - id: container-types-route
+              uri: lb://container-service
+              predicates:
+                - Path=/api/container-types/**
+
+            - id: container-allocations-route
+              uri: lb://container-service
+              predicates:
+                - Path=/api/container-allocations/**
 
 eureka:
   client:
