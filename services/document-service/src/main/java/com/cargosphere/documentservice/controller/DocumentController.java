@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ public class DocumentController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENT')")
     public ResponseEntity<DocumentResponse> createDocument(
             @Valid @RequestBody CreateDocumentRequest request
     ) {
@@ -40,11 +42,13 @@ public class DocumentController {
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<DocumentResponse>> getAllDocuments() {
         return ResponseEntity.ok(documentService.getAllDocuments());
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DocumentResponse> getDocumentById(
             @PathVariable @Positive Long id
     ) {
@@ -52,6 +56,7 @@ public class DocumentController {
     }
 
     @GetMapping("/shipment/{shipmentId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<DocumentResponse>> getDocumentsByShipmentId(
             @PathVariable @Positive Long shipmentId
     ) {
@@ -61,6 +66,7 @@ public class DocumentController {
     }
 
     @PutMapping("/{id}/verification")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DocumentResponse> updateVerification(
             @PathVariable @Positive Long id,
             @Valid @RequestBody UpdateVerificationRequest request
@@ -71,6 +77,7 @@ public class DocumentController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteDocument(
             @PathVariable @Positive Long id
     ) {
