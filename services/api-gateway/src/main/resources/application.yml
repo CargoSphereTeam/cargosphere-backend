@@ -1,4 +1,4 @@
-server:
+﻿server:
   port: 8080
 
 spring:
@@ -46,6 +46,11 @@ spring:
               uri: lb://container-service
               predicates:
                 - Path=/api/container-allocations/**
+
+            - id: payment-service
+              uri: lb://payment-service
+              predicates:
+                - Path=/api/payments/**
 
 eureka:
   client:
