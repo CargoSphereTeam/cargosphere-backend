@@ -18,6 +18,8 @@ import com.cargosphere.shipment.service.ShipmentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.cargosphere.shipment.audit.ShipmentAuditPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -34,25 +36,39 @@ public class ShipmentServiceImpl implements ShipmentService {
     private final ShipmentMapper shipmentMapper;
     private final CargoDetailMapper cargoDetailMapper;
     private final ShipmentEventMapper shipmentEventMapper;
+private ShipmentAuditPublisher shipmentAuditPublisher;
 
-    @Override
-    public ShipmentResponse createShipment(CreateShipmentRequest request) {
-        validateShipmentCreation(request);
+@Override
+public ShipmentResponse createShipment(
+        CreateShipmentRequest request
+) {
+    validateShipmentCreation(request);
 
-        String shipmentNumber = generateShipmentNumber();
+    String shipmentNumber =
+            generateShipmentNumber();
 
-        Shipment shipment = shipmentMapper.toEntity(request, shipmentNumber);
-        Shipment savedShipment = shipmentRepository.save(shipment);
+    Shipment shipment =
+            shipmentMapper.toEntity(
+                    request,
+                    shipmentNumber
+            );
 
-        createShipmentEvent(
-                savedShipment,
-                ShipmentEventType.CREATED,
-                "Shipment created",
-                savedShipment.getOriginLocation()
-        );
+    Shipment savedShipment =
+            shipmentRepository.save(shipment);
 
-        return shipmentMapper.toResponse(savedShipment);
-    }
+    createShipmentEvent(
+            savedShipment,
+            ShipmentEventType.CREATED,
+            "Shipment created",
+            savedShipment.getOriginLocation()
+    );
+
+    publishShipmentCreated(savedShipment);
+
+    return shipmentMapper.toResponse(
+            savedShipment
+    );
+}
 
     @Override
     @Transactional(readOnly = true)
@@ -123,32 +139,48 @@ public class ShipmentServiceImpl implements ShipmentService {
                 .toList();
     }
 
-    @Override
-    public ShipmentResponse updateShipmentStatus(
-            Long shipmentId,
-            UpdateShipmentStatusRequest request
-    ) {
-        Shipment shipment = findShipmentById(shipmentId);
+@Override
+public ShipmentResponse updateShipmentStatus(
+        Long shipmentId,
+        UpdateShipmentStatusRequest request
+) {
+    Shipment shipment =
+            findShipmentById(shipmentId);
 
-        validateStatusTransition(
-                shipment.getStatus(),
-                request.getStatus()
-        );
+    ShipmentStatus previousStatus =
+            shipment.getStatus();
 
-        shipment.setStatus(request.getStatus());
+    validateStatusTransition(
+            previousStatus,
+            request.getStatus()
+    );
 
-        Shipment savedShipment = shipmentRepository.save(shipment);
+    shipment.setStatus(
+            request.getStatus()
+    );
 
-        createShipmentEvent(
-                savedShipment,
-                mapStatusToEventType(request.getStatus()),
-                "Shipment status updated to " + request.getStatus(),
-                null
-        );
+    Shipment savedShipment =
+            shipmentRepository.save(shipment);
 
-        return shipmentMapper.toResponse(savedShipment);
-    }
+    createShipmentEvent(
+            savedShipment,
+            mapStatusToEventType(
+                    request.getStatus()
+            ),
+            "Shipment status updated to "
+                    + request.getStatus(),
+            null
+    );
 
+    publishShipmentStatusUpdated(
+            savedShipment,
+            previousStatus
+    );
+
+    return shipmentMapper.toResponse(
+            savedShipment
+    );
+}
     @Override
     @Transactional(readOnly = true)
     public List<ShipmentEventResponse> getShipmentEventsByShipmentId(
@@ -162,6 +194,14 @@ public class ShipmentServiceImpl implements ShipmentService {
                 .map(shipmentEventMapper::toResponse)
                 .toList();
     }
+
+@Autowired(required = false)
+void setShipmentAuditPublisher(
+        ShipmentAuditPublisher shipmentAuditPublisher
+) {
+    this.shipmentAuditPublisher =
+            shipmentAuditPublisher;
+}
 
     private Shipment findShipmentById(Long shipmentId) {
         return shipmentRepository.findById(shipmentId)
@@ -244,6 +284,32 @@ public class ShipmentServiceImpl implements ShipmentService {
             );
         }
     }
+
+private void publishShipmentCreated(
+        Shipment shipment
+) {
+    if (shipmentAuditPublisher == null) {
+        return;
+    }
+
+    shipmentAuditPublisher
+            .publishShipmentCreated(shipment);
+}
+
+private void publishShipmentStatusUpdated(
+        Shipment shipment,
+        ShipmentStatus previousStatus
+) {
+    if (shipmentAuditPublisher == null) {
+        return;
+    }
+
+    shipmentAuditPublisher
+            .publishShipmentStatusUpdated(
+                    shipment,
+                    previousStatus
+            );
+}
 
     private void createShipmentEvent(
             Shipment shipment,
