@@ -38,6 +38,16 @@ management:
     health:
       show-details: always
 
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+
+  instance:
+    prefer-ip-address: trues
+
 app:
   jwt:
     secret: ${JWT_SECRET}
