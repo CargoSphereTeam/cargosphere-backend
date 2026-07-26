@@ -19,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.cargosphere.payment.audit.PaymentAuditPublisher;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -43,6 +44,9 @@ class PaymentServiceImplTest {
 
     @Mock
     private PaymentMapper paymentMapper;
+
+@Mock
+private PaymentAuditPublisher paymentAuditPublisher;
 
     @InjectMocks
     private PaymentServiceImpl paymentService;

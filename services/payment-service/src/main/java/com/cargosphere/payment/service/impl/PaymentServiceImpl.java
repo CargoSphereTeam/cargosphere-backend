@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.cargosphere.payment.audit.PaymentAuditPublisher;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -35,34 +36,44 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final PaymentMapper paymentMapper;
+private final PaymentAuditPublisher
+        paymentAuditPublisher;
 
     @Override
-    public PaymentResponse createPayment(
-            CreatePaymentRequest request,
-            Long userId
-    ) {
-        validateUserId(userId);
+public PaymentResponse createPayment(
+        CreatePaymentRequest request,
+        Long userId
+) {
+    validateUserId(userId);
 
-        String transactionReference =
-                normalizeNullable(
-                        request.getTransactionReference()
-                );
+    String transactionReference =
+            normalizeNullable(
+                    request.getTransactionReference()
+            );
 
-        validateTransactionReferenceAvailable(
-                transactionReference,
-                null
-        );
+    validateTransactionReferenceAvailable(
+            transactionReference,
+            null
+    );
 
-        Payment payment = paymentMapper.toEntity(
-                request,
-                userId
-        );
+    Payment payment =
+            paymentMapper.toEntity(
+                    request,
+                    userId
+            );
 
-        Payment savedPayment =
-                paymentRepository.save(payment);
+    Payment savedPayment =
+            paymentRepository.save(payment);
 
-        return paymentMapper.toResponse(savedPayment);
-    }
+    paymentAuditPublisher
+            .publishPaymentCreated(
+                    savedPayment
+            );
+
+    return paymentMapper.toResponse(
+            savedPayment
+    );
+}
 
     @Override
     @Transactional(readOnly = true)
@@ -110,74 +121,96 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    public PaymentResponse updatePaymentStatus(
-            Long paymentId,
-            UpdatePaymentStatusRequest request
-    ) {
-        Payment payment = findPaymentById(paymentId);
+public PaymentResponse updatePaymentStatus(
+        Long paymentId,
+        UpdatePaymentStatusRequest request
+) {
+    Payment payment =
+            findPaymentById(paymentId);
 
-        PaymentStatus currentStatus =
-                payment.getPaymentStatus();
+    PaymentStatus previousStatus =
+            payment.getPaymentStatus();
 
-        PaymentStatus requestedStatus =
-                request.getPaymentStatus();
+    PaymentStatus requestedStatus =
+            request.getPaymentStatus();
 
-        validateStatusTransition(
-                currentStatus,
-                requestedStatus
-        );
+    validateStatusTransition(
+            previousStatus,
+            requestedStatus
+    );
 
-        updateTransactionReference(
-                payment,
-                request.getTransactionReference()
-        );
+    updateTransactionReference(
+            payment,
+            request.getTransactionReference()
+    );
 
-        updateRemarks(
-                payment,
-                request.getRemarks()
-        );
+    updateRemarks(
+            payment,
+            request.getRemarks()
+    );
 
-        payment.setPaymentStatus(requestedStatus);
+    payment.setPaymentStatus(
+            requestedStatus
+    );
 
-        updatePaidDate(payment, requestedStatus);
+    updatePaidDate(
+            payment,
+            requestedStatus
+    );
 
-        Payment updatedPayment =
-                paymentRepository.save(payment);
+    Payment updatedPayment =
+            paymentRepository.save(payment);
 
-        return paymentMapper.toResponse(updatedPayment);
-    }
+    paymentAuditPublisher
+            .publishPaymentStatusUpdated(
+                    updatedPayment,
+                    previousStatus
+            );
+
+    return paymentMapper.toResponse(
+            updatedPayment
+    );
+}
 
     @Override
-    public PaymentResponse refundPayment(
-            Long paymentId,
-            RefundPaymentRequest request
-    ) {
-        Payment payment = findPaymentById(paymentId);
+public PaymentResponse refundPayment(
+        Long paymentId,
+        RefundPaymentRequest request
+) {
+    Payment payment =
+            findPaymentById(paymentId);
 
-        if (payment.getPaymentStatus()
-                != PaymentStatus.PAID) {
+    PaymentStatus previousStatus =
+            payment.getPaymentStatus();
 
-            throw new InvalidPaymentStateException(
-                    "Only PAID payments can be refunded"
-            );
-        }
-
-        payment.setPaymentStatus(
-                PaymentStatus.REFUNDED
-        );
-
-        appendRefundReason(
-                payment,
-                request.getReason()
-        );
-
-        Payment refundedPayment =
-                paymentRepository.save(payment);
-
-        return paymentMapper.toResponse(
-                refundedPayment
+    if (previousStatus != PaymentStatus.PAID) {
+        throw new InvalidPaymentStateException(
+                "Only PAID payments can be refunded"
         );
     }
+
+    payment.setPaymentStatus(
+            PaymentStatus.REFUNDED
+    );
+
+    appendRefundReason(
+            payment,
+            request.getReason()
+    );
+
+    Payment refundedPayment =
+            paymentRepository.save(payment);
+
+    paymentAuditPublisher
+            .publishPaymentRefunded(
+                    refundedPayment,
+                    previousStatus
+            );
+
+    return paymentMapper.toResponse(
+            refundedPayment
+    );
+}
 
     private Payment findPaymentById(Long paymentId) {
         return paymentRepository.findById(paymentId)
