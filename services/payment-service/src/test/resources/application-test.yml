@@ -29,5 +29,12 @@ eureka:
 
 app:
   jwt:
-    secret: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+    secret: ${JWT_SECRET}
     issuer: cargosphere-auth-service
+
+  audit-client:
+    enabled: false
+    base-url: http://localhost:8086
+    api-key: ""
+    connect-timeout: PT2S
+    read-timeout: PT3S
