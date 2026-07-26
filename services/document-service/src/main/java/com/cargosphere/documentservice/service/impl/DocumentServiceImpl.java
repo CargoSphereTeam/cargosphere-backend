@@ -1,5 +1,8 @@
 package com.cargosphere.documentservice.service.impl;
 
+import com.cargosphere.documentservice.audit.CurrentActor;
+import com.cargosphere.documentservice.audit.DocumentActorProvider;
+import com.cargosphere.documentservice.audit.DocumentAuditPublisher;
 import com.cargosphere.documentservice.dto.CreateDocumentRequest;
 import com.cargosphere.documentservice.dto.DocumentResponse;
 import com.cargosphere.documentservice.dto.UpdateVerificationRequest;
@@ -11,6 +14,7 @@ import com.cargosphere.documentservice.mapper.DocumentMapper;
 import com.cargosphere.documentservice.repository.DocumentRepository;
 import com.cargosphere.documentservice.service.DocumentService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,8 +29,14 @@ public class DocumentServiceImpl implements DocumentService {
 
     private final DocumentRepository documentRepository;
 
+    private DocumentAuditPublisher documentAuditPublisher;
+
+    private DocumentActorProvider documentActorProvider;
+
     @Override
-    public DocumentResponse createDocument(CreateDocumentRequest request) {
+    public DocumentResponse createDocument(
+            CreateDocumentRequest request
+    ) {
         String normalizedType = request.getDocumentType()
                 .trim()
                 .toUpperCase(Locale.ROOT);
@@ -36,12 +46,17 @@ public class DocumentServiceImpl implements DocumentService {
                 normalizedType
         )) {
             throw new DuplicateDocumentException(
-                    "Document type already exists for shipment: " + normalizedType
+                    "Document type already exists for shipment: "
+                            + normalizedType
             );
         }
 
         Document document = DocumentMapper.toEntity(request);
-        Document savedDocument = documentRepository.save(document);
+
+        Document savedDocument =
+                documentRepository.save(document);
+
+        publishDocumentCreated(savedDocument);
 
         return DocumentMapper.toResponse(savedDocument);
     }
@@ -58,13 +73,18 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional(readOnly = true)
     public DocumentResponse getDocumentById(Long id) {
-        return DocumentMapper.toResponse(findDocument(id));
+        return DocumentMapper.toResponse(
+                findDocument(id)
+        );
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<DocumentResponse> getDocumentsByShipmentId(Long shipmentId) {
-        return documentRepository.findByShipmentId(shipmentId)
+    public List<DocumentResponse> getDocumentsByShipmentId(
+            Long shipmentId
+    ) {
+        return documentRepository
+                .findByShipmentId(shipmentId)
                 .stream()
                 .map(DocumentMapper::toResponse)
                 .toList();
@@ -75,19 +95,38 @@ public class DocumentServiceImpl implements DocumentService {
             Long id,
             UpdateVerificationRequest request
     ) {
-        if (request.getVerificationStatus() == VerificationStatus.PENDING) {
+        if (
+                request.getVerificationStatus()
+                        == VerificationStatus.PENDING
+        ) {
             throw new IllegalArgumentException(
                     "Verification status must be VERIFIED or REJECTED"
             );
         }
 
+        CurrentActor actor = getCurrentActor();
+
+        if (actor.userId() == null) {
+            throw new IllegalStateException(
+                    "Authenticated user ID is missing"
+            );
+        }
+
         Document document = findDocument(id);
-        document.setVerificationStatus(request.getVerificationStatus());
-        document.setVerifiedBy(request.getVerifiedBy());
+
+        document.setVerificationStatus(
+                request.getVerificationStatus()
+        );
+
+        document.setVerifiedBy(actor.userId());
         document.setVerifiedAt(LocalDateTime.now());
         document.setRemarks(request.getRemarks());
 
-        Document updatedDocument = documentRepository.save(document);
+        Document updatedDocument =
+                documentRepository.save(document);
+
+        publishVerificationEvent(updatedDocument);
+
         return DocumentMapper.toResponse(updatedDocument);
     }
 
@@ -97,10 +136,69 @@ public class DocumentServiceImpl implements DocumentService {
         documentRepository.delete(document);
     }
 
+    @Autowired(required = false)
+    void setDocumentAuditPublisher(
+            DocumentAuditPublisher documentAuditPublisher
+    ) {
+        this.documentAuditPublisher =
+                documentAuditPublisher;
+    }
+
+    @Autowired(required = false)
+    void setDocumentActorProvider(
+            DocumentActorProvider documentActorProvider
+    ) {
+        this.documentActorProvider =
+                documentActorProvider;
+    }
+
+    private CurrentActor getCurrentActor() {
+        if (documentActorProvider == null) {
+            return CurrentActor.anonymous();
+        }
+
+        return documentActorProvider.getCurrentActor();
+    }
+
+    private void publishDocumentCreated(
+            Document document
+    ) {
+        if (documentAuditPublisher == null) {
+            return;
+        }
+
+        documentAuditPublisher
+                .publishDocumentCreated(document);
+    }
+
+    private void publishVerificationEvent(
+            Document document
+    ) {
+        if (documentAuditPublisher == null) {
+            return;
+        }
+
+        if (
+                document.getVerificationStatus()
+                        == VerificationStatus.VERIFIED
+        ) {
+            documentAuditPublisher
+                    .publishDocumentVerified(document);
+
+            return;
+        }
+
+        documentAuditPublisher
+                .publishDocumentRejected(document);
+    }
+
     private Document findDocument(Long id) {
         return documentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Document not found with ID: " + id
-                ));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Document not found with ID: "
+                                        + id
+                        )
+                );
     }
 }
