@@ -419,11 +419,6 @@ class DocumentControllerTest {
                         jsonPath(
                                 "$.validationErrors.verificationStatus"
                         ).exists()
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.validationErrors.verifiedBy"
-                        ).exists()
                 );
 
         verifyNoInteractions(documentService);

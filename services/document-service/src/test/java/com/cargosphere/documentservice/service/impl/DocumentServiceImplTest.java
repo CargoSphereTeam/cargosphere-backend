@@ -1,5 +1,8 @@
 package com.cargosphere.documentservice.service.impl;
 
+import com.cargosphere.documentservice.audit.CurrentActor;
+import com.cargosphere.documentservice.audit.DocumentActorProvider;
+import com.cargosphere.documentservice.audit.DocumentAuditPublisher;
 import com.cargosphere.documentservice.dto.CreateDocumentRequest;
 import com.cargosphere.documentservice.dto.DocumentResponse;
 import com.cargosphere.documentservice.dto.UpdateVerificationRequest;
@@ -8,6 +11,7 @@ import com.cargosphere.documentservice.entity.VerificationStatus;
 import com.cargosphere.documentservice.exception.DuplicateDocumentException;
 import com.cargosphere.documentservice.exception.ResourceNotFoundException;
 import com.cargosphere.documentservice.repository.DocumentRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -28,8 +32,29 @@ class DocumentServiceImplTest {
     @Mock
     private DocumentRepository documentRepository;
 
+    @Mock
+    private DocumentActorProvider documentActorProvider;
+
+    @Mock
+    private DocumentAuditPublisher documentAuditPublisher;
+
     @InjectMocks
     private DocumentServiceImpl documentService;
+
+    @BeforeEach
+    void setUpCurrentActor() {
+        documentService.setDocumentActorProvider(documentActorProvider);
+        documentService.setDocumentAuditPublisher(documentAuditPublisher);
+
+        lenient()
+                .when(documentActorProvider.getCurrentActor())
+                .thenReturn(
+                        new CurrentActor(
+                                10L,
+                                "ROLE_ADMIN"
+                        )
+                );
+    }
 
     @Test
     void createDocument_shouldSaveNormalizedDocument() {
@@ -350,7 +375,6 @@ class DocumentServiceImplTest {
                 new UpdateVerificationRequest();
 
         request.setVerificationStatus(status);
-        request.setVerifiedBy(10L);
         request.setRemarks(remarks);
 
         return request;
