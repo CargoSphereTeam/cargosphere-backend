@@ -65,6 +65,31 @@ public class AuditLogController {
                 .body(response);
     }
 
+
+    @PostMapping("/internal")
+    @PreAuthorize("hasRole('SERVICE')")
+    public ResponseEntity<AuditLogResponse>
+    createInternalAuditLog(
+            @Valid
+            @RequestBody
+            CreateAuditLogRequest request
+    ) {
+        AuditLogResponse response =
+                auditLogService.createAuditLog(
+                        request
+                );
+
+        URI location = ServletUriComponentsBuilder
+                .fromCurrentContextPath()
+                .path("/api/audits/{id}")
+                .buildAndExpand(response.getId())
+                .toUri();
+
+        return ResponseEntity
+                .created(location)
+                .body(response);
+    }
+
     @GetMapping("/{auditLogId}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AuditLogResponse>
