@@ -1,5 +1,6 @@
 package com.cargosphere.container.service.impl;
 
+import com.cargosphere.container.audit.ContainerAuditPublisher;
 import com.cargosphere.container.dto.AllocationRequest;
 import com.cargosphere.container.dto.AllocationResponse;
 import com.cargosphere.container.entity.ContainerType;
@@ -36,12 +37,18 @@ class ShipmentContainerAllocationServiceImplTest {
     @Mock
     private ContainerMapper containerMapper;
 
+    @Mock
+    private ContainerAuditPublisher auditPublisher;
+
     @InjectMocks
     private ShipmentContainerAllocationServiceImpl allocationService;
 
     private ContainerType containerType;
+
     private ShipmentContainerAllocation allocation;
+
     private AllocationRequest request;
+
     private AllocationResponse response;
 
     @BeforeEach
@@ -87,14 +94,21 @@ class ShipmentContainerAllocationServiceImplTest {
     }
 
     @Test
-    void createAllocation_shouldSaveAndReturnResponse() {
+    void createAllocation_shouldSaveReturnResponseAndPublishAudit() {
         when(containerTypeRepository.findById(1L))
                 .thenReturn(Optional.of(containerType));
+
         when(allocationRepository
-                .existsByShipmentIdAndContainerTypeContainerTypeId(10L, 1L))
+                .existsByShipmentIdAndContainerTypeContainerTypeId(
+                        10L,
+                        1L
+                ))
                 .thenReturn(false);
-        when(allocationRepository.save(any(ShipmentContainerAllocation.class)))
-                .thenReturn(allocation);
+
+        when(allocationRepository.save(
+                any(ShipmentContainerAllocation.class)
+        )).thenReturn(allocation);
+
         when(containerMapper.toAllocationResponse(allocation))
                 .thenReturn(response);
 
@@ -108,6 +122,12 @@ class ShipmentContainerAllocationServiceImplTest {
 
         verify(allocationRepository)
                 .save(any(ShipmentContainerAllocation.class));
+
+        verify(containerMapper)
+                .toAllocationResponse(allocation);
+
+        verify(auditPublisher)
+                .publishAllocated(response);
     }
 
     @Test
@@ -121,14 +141,20 @@ class ShipmentContainerAllocationServiceImplTest {
         );
 
         verifyNoInteractions(allocationRepository);
+        verifyNoInteractions(containerMapper);
+        verifyNoInteractions(auditPublisher);
     }
 
     @Test
     void createAllocation_whenDuplicate_shouldThrowConflict() {
         when(containerTypeRepository.findById(1L))
                 .thenReturn(Optional.of(containerType));
+
         when(allocationRepository
-                .existsByShipmentIdAndContainerTypeContainerTypeId(10L, 1L))
+                .existsByShipmentIdAndContainerTypeContainerTypeId(
+                        10L,
+                        1L
+                ))
                 .thenReturn(true);
 
         assertThrows(
@@ -138,12 +164,16 @@ class ShipmentContainerAllocationServiceImplTest {
 
         verify(allocationRepository, never())
                 .save(any(ShipmentContainerAllocation.class));
+
+        verifyNoInteractions(containerMapper);
+        verifyNoInteractions(auditPublisher);
     }
 
     @Test
     void getAllocationById_whenFound_shouldReturnResponse() {
         when(allocationRepository.findById(1L))
                 .thenReturn(Optional.of(allocation));
+
         when(containerMapper.toAllocationResponse(allocation))
                 .thenReturn(response);
 
@@ -152,6 +182,8 @@ class ShipmentContainerAllocationServiceImplTest {
 
         assertEquals(1L, actual.allocationId());
         assertEquals(10L, actual.shipmentId());
+
+        verifyNoInteractions(auditPublisher);
     }
 
     @Test
@@ -165,12 +197,14 @@ class ShipmentContainerAllocationServiceImplTest {
         );
 
         verifyNoInteractions(containerMapper);
+        verifyNoInteractions(auditPublisher);
     }
 
     @Test
     void getAllocationsByShipmentId_shouldReturnMappedList() {
         when(allocationRepository.findByShipmentId(10L))
                 .thenReturn(List.of(allocation));
+
         when(containerMapper.toAllocationResponse(allocation))
                 .thenReturn(response);
 
@@ -179,16 +213,25 @@ class ShipmentContainerAllocationServiceImplTest {
 
         assertEquals(1, actual.size());
         assertEquals(10L, actual.get(0).shipmentId());
+
+        verifyNoInteractions(auditPublisher);
     }
 
     @Test
-    void deleteAllocation_whenFound_shouldDeleteEntity() {
+    void deleteAllocation_whenFound_shouldDeleteAndPublishReleasedAudit() {
         when(allocationRepository.findById(1L))
                 .thenReturn(Optional.of(allocation));
 
         allocationService.deleteAllocation(1L);
 
-        verify(allocationRepository).delete(allocation);
+        verify(allocationRepository)
+                .delete(allocation);
+
+        verify(auditPublisher)
+                .publishReleased(
+                        1L,
+                        10L
+                );
     }
 
     @Test
@@ -201,6 +244,9 @@ class ShipmentContainerAllocationServiceImplTest {
                 () -> allocationService.deleteAllocation(99L)
         );
 
-        verify(allocationRepository, never()).delete(any());
+        verify(allocationRepository, never())
+                .delete(any());
+
+        verifyNoInteractions(auditPublisher);
     }
 }
