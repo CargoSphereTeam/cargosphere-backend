@@ -1,5 +1,6 @@
 package com.cargosphere.container.service.impl;
 
+import com.cargosphere.container.audit.ContainerAuditPublisher;
 import com.cargosphere.container.dto.AllocationRequest;
 import com.cargosphere.container.dto.AllocationResponse;
 import com.cargosphere.container.entity.ContainerType;
@@ -23,11 +24,17 @@ public class ShipmentContainerAllocationServiceImpl
         implements ShipmentContainerAllocationService {
 
     private final ShipmentContainerAllocationRepository allocationRepository;
+
     private final ContainerTypeRepository containerTypeRepository;
+
     private final ContainerMapper containerMapper;
 
+    private final ContainerAuditPublisher auditPublisher;
+
     @Override
-    public AllocationResponse createAllocation(AllocationRequest request) {
+    public AllocationResponse createAllocation(
+            AllocationRequest request
+    ) {
         ContainerType containerType =
                 findContainerTypeById(request.containerTypeId());
 
@@ -52,16 +59,25 @@ public class ShipmentContainerAllocationServiceImpl
                         .shipmentId(request.shipmentId())
                         .containerType(containerType)
                         .quantity(request.quantity())
-                        .allocationStatus(normalizeStatus(
-                                request.allocationStatus()
-                        ))
+                        .allocationStatus(
+                                normalizeStatus(
+                                        request.allocationStatus()
+                                )
+                        )
                         .notes(trimToNull(request.notes()))
                         .build();
 
         ShipmentContainerAllocation savedAllocation =
                 allocationRepository.save(allocation);
 
-        return containerMapper.toAllocationResponse(savedAllocation);
+        AllocationResponse response =
+                containerMapper.toAllocationResponse(
+                        savedAllocation
+                );
+
+        auditPublisher.publishAllocated(response);
+
+        return response;
     }
 
     @Override
@@ -75,7 +91,9 @@ public class ShipmentContainerAllocationServiceImpl
 
     @Override
     @Transactional(readOnly = true)
-    public AllocationResponse getAllocationById(Long allocationId) {
+    public AllocationResponse getAllocationById(
+            Long allocationId
+    ) {
         ShipmentContainerAllocation allocation =
                 findAllocationById(allocationId);
 
@@ -110,7 +128,9 @@ public class ShipmentContainerAllocationServiceImpl
                         request.containerTypeId()
                 )
                 .filter(existing ->
-                        !existing.getAllocationId().equals(allocationId)
+                        !existing.getAllocationId().equals(
+                                allocationId
+                        )
                 )
                 .ifPresent(existing -> {
                     throw new DuplicateResourceException(
@@ -132,7 +152,9 @@ public class ShipmentContainerAllocationServiceImpl
         ShipmentContainerAllocation updatedAllocation =
                 allocationRepository.save(allocation);
 
-        return containerMapper.toAllocationResponse(updatedAllocation);
+        return containerMapper.toAllocationResponse(
+                updatedAllocation
+        );
     }
 
     @Override
@@ -140,7 +162,14 @@ public class ShipmentContainerAllocationServiceImpl
         ShipmentContainerAllocation allocation =
                 findAllocationById(allocationId);
 
+        Long shipmentId = allocation.getShipmentId();
+
         allocationRepository.delete(allocation);
+
+        auditPublisher.publishReleased(
+                allocationId,
+                shipmentId
+        );
     }
 
     private ShipmentContainerAllocation findAllocationById(
@@ -155,7 +184,9 @@ public class ShipmentContainerAllocationServiceImpl
                 );
     }
 
-    private ContainerType findContainerTypeById(Long containerTypeId) {
+    private ContainerType findContainerTypeById(
+            Long containerTypeId
+    ) {
         return containerTypeRepository.findById(containerTypeId)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
