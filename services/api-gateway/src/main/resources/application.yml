@@ -9,23 +9,6 @@ spring:
     gateway:
       server:
         webflux:
-          globalcors:
-            add-to-simple-url-handler-mapping: true
-            cors-configurations:
-              '[/**]':
-                allowedOrigins:
-                  - "http://localhost:5173"
-                allowedMethods:
-                  - GET
-                  - POST
-                  - PUT
-                  - PATCH
-                  - DELETE
-                  - OPTIONS
-                allowedHeaders:
-                  - "*"
-                allowCredentials: true
-
           routes:
             - id: auth-service-route
               uri: lb://auth-service
@@ -47,11 +30,17 @@ spring:
               predicates:
                 - Path=/api/container-allocations/**
 
-            - id: payment-service
+            - id: document-service-route
+              uri: lb://document-service
+              predicates:
+                - Path=/api/documents/**
+
+            - id: payment-service-route
               uri: lb://payment-service
               predicates:
                 - Path=/api/payments/**
-            - id: audit-service
+
+            - id: audit-service-route
               uri: lb://audit-service
               predicates:
                 - Path=/api/audits/**
@@ -75,3 +64,7 @@ management:
   endpoint:
     health:
       show-details: never
+
+app:
+  cors:
+    allowed-origin: "${FRONTEND_ORIGIN:http://localhost:5173}"
