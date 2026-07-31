@@ -51,3 +51,20 @@ app:
 
   internal-audit:
     api-key: ${INTERNAL_AUDIT_API_KEY}  
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+
+  packages-to-scan:
+    - com.cargosphere.audit.controller
+
+  paths-to-match:
+    - /api/audits
+    - /api/audits/**

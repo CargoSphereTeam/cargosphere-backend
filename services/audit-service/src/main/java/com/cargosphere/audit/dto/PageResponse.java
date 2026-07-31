@@ -1,5 +1,6 @@
 package com.cargosphere.audit.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -12,6 +13,10 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(
+        name = "PageResponse",
+        description = "Generic paginated response"
+)
 public class PageResponse<T> {
 
     private List<T> content;

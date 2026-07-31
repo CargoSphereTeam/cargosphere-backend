@@ -3,6 +3,7 @@ package com.cargosphere.audit.dto;
 import com.cargosphere.audit.entity.enums.AuditAction;
 import com.cargosphere.audit.entity.enums.AuditEntityType;
 import com.cargosphere.audit.entity.enums.AuditOutcome;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -14,6 +15,10 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(
+        name = "AuditLogResponse",
+        description = "Audit-log response"
+)
 public class AuditLogResponse {
 
     private Long id;
