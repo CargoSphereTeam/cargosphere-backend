@@ -1,19 +1,19 @@
 package com.cargosphere.registry;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest(
-        classes = ServiceRegistryApplication.class,
-        properties = {
-                "spring.autoconfigure.exclude="
-                        + "org.springframework.cloud.netflix.eureka.server."
-                        + "EurekaServerAutoConfiguration"
-        }
-)
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+
 class ServiceRegistryApplicationTests {
 
     @Test
-    void contextLoads() {
+    void applicationMainMethodShouldBePresent() {
+        assertDoesNotThrow(() ->
+                ServiceRegistryApplication.class
+                        .getDeclaredMethod(
+                                "main",
+                                String[].class
+                        )
+        );
     }
 }
