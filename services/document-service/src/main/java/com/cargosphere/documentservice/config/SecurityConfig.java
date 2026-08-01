@@ -44,14 +44,21 @@ public class SecurityConfig {
                         ).permitAll()
 
                         .requestMatchers(
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html"
+                        ).permitAll()
+
+                        .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/documents/health",
                                 "/actuator/health",
                                 "/actuator/info"
                         ).permitAll()
 
-                        .requestMatchers("/api/documents/**")
-                        .authenticated()
+                        .requestMatchers(
+                                "/api/documents/**"
+                        ).authenticated()
 
                         .anyRequest()
                         .denyAll()

@@ -1,0 +1,56 @@
+package com.cargosphere.shipment.config;
+
+import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityScheme;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration(proxyBeanMethods = false)
+public class OpenApiConfig {
+
+    public static final String SECURITY_SCHEME_NAME =
+            "bearerAuth";
+
+    @Bean
+    public OpenAPI shipmentServiceOpenApi() {
+        SecurityScheme jwtSecurityScheme =
+                new SecurityScheme()
+                        .type(SecurityScheme.Type.HTTP)
+                        .scheme("bearer")
+                        .bearerFormat("JWT")
+                        .description(
+                                "Enter the JWT access token returned "
+                                        + "by the auth-service login API."
+                        );
+
+        return new OpenAPI()
+                .info(
+                        new Info()
+                                .title(
+                                        "CargoSphere Shipment Service API"
+                                )
+                                .version("v1")
+                                .description(
+                                        "Shipment creation, cargo details, "
+                                                + "status management and "
+                                                + "shipment event APIs."
+                                )
+                                .contact(
+                                        new Contact()
+                                                .name(
+                                                        "CargoSphere Team"
+                                                )
+                                )
+                )
+                .components(
+                        new Components()
+                                .addSecuritySchemes(
+                                        SECURITY_SCHEME_NAME,
+                                        jwtSecurityScheme
+                                )
+                );
+    }
+}

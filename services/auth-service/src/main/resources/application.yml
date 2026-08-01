@@ -58,3 +58,19 @@ app:
     api-key: ${INTERNAL_AUDIT_API_KEY:}
     connect-timeout: ${AUDIT_CONNECT_TIMEOUT:PT2S}
     read-timeout: ${AUDIT_READ_TIMEOUT:PT3S}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+
+  packages-to-scan:
+    - com.cargosphere.auth.controller
+
+  paths-to-match:
+    - /api/auth/**

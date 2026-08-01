@@ -6,6 +6,11 @@ import com.cargosphere.audit.dto.PageResponse;
 import com.cargosphere.audit.entity.enums.AuditAction;
 import com.cargosphere.audit.entity.enums.AuditEntityType;
 import com.cargosphere.audit.service.AuditLogService;
+import com.cargosphere.audit.config.OpenApiConfig;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -34,6 +39,10 @@ import java.net.URI;
 @RequestMapping("/api/audits")
 @RequiredArgsConstructor
 @Validated
+@Tag(
+        name = "Audit Logs",
+        description = "Audit-log creation, lookup and filtering"
+)
 public class AuditLogController {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
@@ -41,6 +50,11 @@ public class AuditLogController {
 
     private final AuditLogService auditLogService;
 
+    @Operation(
+            summary = "Create an audit log",
+            description = "Creates an audit log using ADMIN JWT authentication."
+    )
+    @SecurityRequirement(name = OpenApiConfig.JWT_SCHEME_NAME)
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AuditLogResponse>
@@ -66,6 +80,14 @@ public class AuditLogController {
     }
 
 
+    @Operation(
+            summary = "Create an internal audit log",
+            description =
+                    "Creates an audit log using the X-Internal-API-Key header."
+    )
+    @SecurityRequirement(
+            name = OpenApiConfig.INTERNAL_API_KEY_SCHEME_NAME
+    )
     @PostMapping("/internal")
     @PreAuthorize("hasRole('SERVICE')")
     public ResponseEntity<AuditLogResponse>
@@ -90,6 +112,11 @@ public class AuditLogController {
                 .body(response);
     }
 
+    @Operation(
+            summary = "Get audit log by ID",
+            description = "Returns one audit log. Requires ROLE_ADMIN."
+    )
+    @SecurityRequirement(name = OpenApiConfig.JWT_SCHEME_NAME)
     @GetMapping("/{auditLogId}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<AuditLogResponse>
@@ -107,6 +134,11 @@ public class AuditLogController {
         );
     }
 
+    @Operation(
+            summary = "Get all audit logs",
+            description = "Returns paginated audit logs. Requires ROLE_ADMIN."
+    )
+    @SecurityRequirement(name = OpenApiConfig.JWT_SCHEME_NAME)
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PageResponse<AuditLogResponse>>
@@ -142,6 +174,11 @@ public class AuditLogController {
         );
     }
 
+    @Operation(
+            summary = "Get audit logs by actor",
+            description = "Filters audit logs by actor user ID."
+    )
+    @SecurityRequirement(name = OpenApiConfig.JWT_SCHEME_NAME)
     @GetMapping("/actor/{actorUserId}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PageResponse<AuditLogResponse>>
@@ -185,6 +222,11 @@ public class AuditLogController {
         );
     }
 
+    @Operation(
+            summary = "Get audit logs by action",
+            description = "Filters audit logs by audit action."
+    )
+    @SecurityRequirement(name = OpenApiConfig.JWT_SCHEME_NAME)
     @GetMapping("/action/{action}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PageResponse<AuditLogResponse>>
@@ -224,6 +266,11 @@ public class AuditLogController {
         );
     }
 
+    @Operation(
+            summary = "Get audit logs by entity",
+            description = "Filters audit logs by entity type and entity ID."
+    )
+    @SecurityRequirement(name = OpenApiConfig.JWT_SCHEME_NAME)
     @GetMapping("/entity")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PageResponse<AuditLogResponse>>
@@ -274,6 +321,11 @@ public class AuditLogController {
         );
     }
 
+    @Operation(
+            summary = "Get audit logs by service",
+            description = "Filters audit logs by service name."
+    )
+    @SecurityRequirement(name = OpenApiConfig.JWT_SCHEME_NAME)
     @GetMapping("/service")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PageResponse<AuditLogResponse>>
@@ -321,6 +373,11 @@ public class AuditLogController {
         );
     }
 
+    @Operation(
+            summary = "Get audit logs by request ID",
+            description = "Filters audit logs by request ID."
+    )
+    @SecurityRequirement(name = OpenApiConfig.JWT_SCHEME_NAME)
     @GetMapping("/request")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PageResponse<AuditLogResponse>>

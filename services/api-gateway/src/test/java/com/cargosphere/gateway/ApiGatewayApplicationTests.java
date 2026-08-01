@@ -25,17 +25,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ApiGatewayApplicationTests {
 
     @Autowired
-    private RouteDefinitionLocator
-            routeDefinitionLocator;
+    private RouteDefinitionLocator routeDefinitionLocator;
 
     @Test
     void contextLoads() {
-        assertThat(routeDefinitionLocator)
-                .isNotNull();
+        assertThat(routeDefinitionLocator).isNotNull();
     }
 
     @Test
-    void shouldConfigureAllRequiredServiceRoutes() {
+    void shouldConfigureApplicationAndOpenApiRoutes() {
         Map<String, RouteDefinition> routes =
                 routeDefinitionLocator
                         .getRouteDefinitions()
@@ -99,7 +97,49 @@ class ApiGatewayApplicationTests {
                 "/api/audits/**"
         );
 
-        assertThat(routes).hasSize(7);
+        assertRoute(
+                routes,
+                "auth-service-openapi-route",
+                "lb://auth-service",
+                "/openapi/auth-service"
+        );
+
+        assertRoute(
+                routes,
+                "shipment-service-openapi-route",
+                "lb://shipment-service",
+                "/openapi/shipment-service"
+        );
+
+        assertRoute(
+                routes,
+                "container-service-openapi-route",
+                "lb://container-service",
+                "/openapi/container-service"
+        );
+
+        assertRoute(
+                routes,
+                "document-service-openapi-route",
+                "lb://document-service",
+                "/openapi/document-service"
+        );
+
+        assertRoute(
+                routes,
+                "payment-service-openapi-route",
+                "lb://payment-service",
+                "/openapi/payment-service"
+        );
+
+        assertRoute(
+                routes,
+                "audit-service-openapi-route",
+                "lb://audit-service",
+                "/openapi/audit-service"
+        );
+
+        assertThat(routes).hasSize(13);
     }
 
     private void assertRoute(
@@ -108,16 +148,12 @@ class ApiGatewayApplicationTests {
             String expectedUri,
             String expectedPath
     ) {
-        assertThat(routes)
-                .containsKey(routeId);
+        assertThat(routes).containsKey(routeId);
 
-        RouteDefinition route =
-                routes.get(routeId);
+        RouteDefinition route = routes.get(routeId);
 
         assertThat(route.getUri())
-                .isEqualTo(
-                        URI.create(expectedUri)
-                );
+                .isEqualTo(URI.create(expectedUri));
 
         boolean pathExists =
                 route.getPredicates()
@@ -128,9 +164,7 @@ class ApiGatewayApplicationTests {
                                         .values()
                                         .stream()
                         )
-                        .anyMatch(
-                                expectedPath::equals
-                        );
+                        .anyMatch(expectedPath::equals);
 
         assertThat(pathExists)
                 .as(
