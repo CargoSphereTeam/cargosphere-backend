@@ -19,3 +19,13 @@ spring:
     default-schema: auth_schema
     schemas: auth_schema
     locations: classpath:db/migration
+
+eureka:
+  client:
+    enabled: false
+
+app:
+  jwt:
+    secret: Y2FyZ29zcGhlcmUtdGVzdC1qd3Qtc2VjcmV0LWtleSE=
+    issuer: cargosphere-auth-service
+    expiration: PT1H

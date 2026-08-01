@@ -1,0 +1,76 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: shipment-service
+
+  datasource:
+    url: ${SHIPMENT_DB_URL}
+    username: ${SHIPMENT_DB_USERNAME}
+    password: ${SHIPMENT_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: shipment_schema
+        format_sql: true
+
+  flyway:
+    enabled: true
+    default-schema: shipment_schema
+    schemas: shipment_schema
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+  endpoint:
+    health:
+      show-details: never
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+
+  instance:
+    prefer-ip-address: true
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    issuer: ${JWT_ISSUER:cargosphere-auth-service}
+
+  audit-client:
+    enabled: ${AUDIT_CLIENT_ENABLED:true}
+    base-url: ${AUDIT_SERVICE_URL:http://localhost:8086}
+    api-key: ${INTERNAL_AUDIT_API_KEY:}
+    connect-timeout: ${AUDIT_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${AUDIT_READ_TIMEOUT:PT3S}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+
+  packages-to-scan:
+    - com.cargosphere.shipment.controller
+
+  paths-to-match:
+    - /api/shipments
+    - /api/shipments/**

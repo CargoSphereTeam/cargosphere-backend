@@ -1,0 +1,238 @@
+name: cargosphere
+
+services:
+  service-registry:
+    build:
+      context: ./services/service-registry
+      dockerfile: Dockerfile
+    container_name: cargosphere-service-registry
+    ports:
+      - "8761:8761"
+    environment:
+      EUREKA_INSTANCE_HOSTNAME: service-registry
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8761/actuator/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 25s
+    networks:
+      - cargosphere-network
+    restart: unless-stopped
+
+  audit-service:
+    build:
+      context: ./services/audit-service
+      dockerfile: Dockerfile
+    container_name: cargosphere-audit-service
+    ports:
+      - "8086:8086"
+    env_file:
+      - .env
+    environment:
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8086/actuator/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    networks:
+      - cargosphere-network
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: cargosphere-auth-service
+    ports:
+      - "8081:8081"
+    env_file:
+      - .env
+    environment:
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+      AUDIT_SERVICE_URL: http://audit-service:8086
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      audit-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8081/actuator/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    networks:
+      - cargosphere-network
+    restart: unless-stopped
+
+  shipment-service:
+    build:
+      context: ./services/shipment-service
+      dockerfile: Dockerfile
+    container_name: cargosphere-shipment-service
+    ports:
+      - "8082:8082"
+    env_file:
+      - .env
+    environment:
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+      AUDIT_SERVICE_URL: http://audit-service:8086
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      audit-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8082/actuator/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    networks:
+      - cargosphere-network
+    restart: unless-stopped
+
+  container-service:
+    build:
+      context: ./services/container-service
+      dockerfile: Dockerfile
+    container_name: cargosphere-container-service
+    ports:
+      - "8083:8083"
+    env_file:
+      - .env
+    environment:
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+      AUDIT_SERVICE_URL: http://audit-service:8086
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      audit-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8083/actuator/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    networks:
+      - cargosphere-network
+    restart: unless-stopped
+
+  document-service:
+    build:
+      context: ./services/document-service
+      dockerfile: Dockerfile
+    container_name: cargosphere-document-service
+    ports:
+      - "8084:8084"
+    env_file:
+      - .env
+    environment:
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+      AUDIT_SERVICE_URL: http://audit-service:8086
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      audit-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8084/actuator/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    networks:
+      - cargosphere-network
+    restart: unless-stopped
+
+  payment-service:
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile
+    container_name: cargosphere-payment-service
+    ports:
+      - "8085:8085"
+    env_file:
+      - .env
+    environment:
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+      AUDIT_SERVICE_URL: http://audit-service:8086
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      audit-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8085/actuator/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    networks:
+      - cargosphere-network
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: cargosphere-api-gateway
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      EUREKA_SERVER_URL: http://service-registry:8761/eureka/
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      shipment-service:
+        condition: service_healthy
+      container-service:
+        condition: service_healthy
+      document-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      audit-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8080/actuator/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 35s
+    networks:
+      - cargosphere-network
+    restart: unless-stopped
+
+networks:
+  cargosphere-network:
+    name: cargosphere-network
+    driver: bridge

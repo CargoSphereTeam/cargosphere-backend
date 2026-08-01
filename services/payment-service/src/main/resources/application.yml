@@ -1,0 +1,74 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: payment-service
+
+  datasource:
+    url: ${PAYMENT_DB_URL}
+    username: ${PAYMENT_DB_USERNAME}
+    password: ${PAYMENT_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: payment_schema
+        format_sql: true
+
+  flyway:
+    enabled: true
+    default-schema: payment_schema
+    schemas: payment_schema
+    create-schemas: true
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+  endpoint:
+    health:
+      show-details: always
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    issuer: ${JWT_ISSUER:cargosphere-auth-service}
+
+  audit-client:
+    enabled: ${AUDIT_CLIENT_ENABLED:true}
+    base-url: ${AUDIT_SERVICE_URL:http://localhost:8086}
+    api-key: ${INTERNAL_AUDIT_API_KEY:}
+    connect-timeout: ${AUDIT_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${AUDIT_READ_TIMEOUT:PT3S}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+
+  packages-to-scan:
+    - com.cargosphere.payment.controller
+
+  paths-to-match:
+    - /api/payments
+    - /api/payments/**

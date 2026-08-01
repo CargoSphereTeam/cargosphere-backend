@@ -1,0 +1,81 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: container-service
+
+  datasource:
+    url: ${CONTAINER_DB_URL}
+    username: ${CONTAINER_DB_USERNAME}
+    password: ${CONTAINER_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: container_schema
+        format_sql: true
+    show-sql: true
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    default-schema: container_schema
+    schemas: container_schema
+    create-schemas: true
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+  endpoint:
+    health:
+      show-details: always
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+
+  instance:
+    prefer-ip-address: true
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    issuer: ${JWT_ISSUER:cargosphere-auth-service}
+
+  audit-client:
+    enabled: ${AUDIT_CLIENT_ENABLED:true}
+    base-url: ${AUDIT_SERVICE_URL:http://localhost:8086}
+    api-key: ${INTERNAL_AUDIT_API_KEY:}
+    connect-timeout: ${AUDIT_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${AUDIT_READ_TIMEOUT:PT3S}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+
+  packages-to-scan:
+    - com.cargosphere.container.controller
+
+  paths-to-match:
+    - /api/containers/**
+    - /api/container-types
+    - /api/container-types/**
+    - /api/container-allocations
+    - /api/container-allocations/**

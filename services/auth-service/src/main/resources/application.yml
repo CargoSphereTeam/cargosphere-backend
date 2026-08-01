@@ -35,3 +35,42 @@ management:
   endpoint:
     health:
       show-details: never
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+
+  instance:
+    prefer-ip-address: true
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    issuer: ${JWT_ISSUER:cargosphere-auth-service}
+    expiration: ${JWT_EXPIRATION:PT1H}
+
+  audit-client:
+    enabled: ${AUDIT_CLIENT_ENABLED:true}
+    base-url: ${AUDIT_SERVICE_URL:http://localhost:8086}
+    api-key: ${INTERNAL_AUDIT_API_KEY:}
+    connect-timeout: ${AUDIT_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${AUDIT_READ_TIMEOUT:PT3S}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+
+  packages-to-scan:
+    - com.cargosphere.auth.controller
+
+  paths-to-match:
+    - /api/auth/**
