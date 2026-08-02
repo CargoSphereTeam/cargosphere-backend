@@ -58,6 +58,11 @@ app:
     connect-timeout: ${AUDIT_CONNECT_TIMEOUT:PT2S}
     read-timeout: ${AUDIT_READ_TIMEOUT:PT3S}
 
+  container-client:
+    base-url: ${CONTAINER_SERVICE_URL:http://localhost:8083}
+    connect-timeout: ${CONTAINER_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${CONTAINER_READ_TIMEOUT:PT3S}
+
 springdoc:
   api-docs:
     path: /v3/api-docs
