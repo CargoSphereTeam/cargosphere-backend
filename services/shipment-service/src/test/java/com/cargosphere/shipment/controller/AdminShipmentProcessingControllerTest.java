@@ -2,10 +2,13 @@ package com.cargosphere.shipment.controller;
 
 import com.cargosphere.shipment.config.SecurityConfig;
 import com.cargosphere.shipment.dto.admin.CargoVerificationAction;
+import com.cargosphere.shipment.dto.admin.CargoVerificationItemRequest;
 import com.cargosphere.shipment.dto.admin.CargoVerificationRequest;
 import com.cargosphere.shipment.dto.admin.CargoVerificationResponse;
+import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
+import com.cargosphere.shipment.service.AdminShipmentProcessingService;
 import com.cargosphere.shipment.service.CargoVerificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -18,6 +21,8 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -26,6 +31,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -34,8 +40,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(SecurityConfig.class)
 class AdminShipmentProcessingControllerTest {
 
-    private static final String ENDPOINT =
+    private static final String CARGO_VERIFICATION_ENDPOINT =
             "/api/admin/shipments/10/cargo-verification";
+
+    private static final String START_PROCESSING_ENDPOINT =
+            "/api/admin/shipments/10/processing/start";
 
     @Autowired
     private MockMvc mockMvc;
@@ -47,17 +56,140 @@ class AdminShipmentProcessingControllerTest {
     private CargoVerificationService cargoVerificationService;
 
     @MockBean
+    private AdminShipmentProcessingService
+            adminShipmentProcessingService;
+
+    @MockBean
     private JwtDecoder jwtDecoder;
 
     @Test
-    void shouldAllowAdminToSaveCargoVerification() throws Exception {
+    void shouldAllowAdminToStartProcessing() throws Exception {
+        ProcessingStartResponse response =
+                ProcessingStartResponse.builder()
+                        .shipmentId(10L)
+                        .shipmentNumber("SHP-2026-00010")
+                        .processingStage(
+                                ProcessingStage.CONTAINER_ALLOCATION
+                        )
+                        .processingStartedAt(
+                                OffsetDateTime.of(
+                                        2026,
+                                        8,
+                                        2,
+                                        8,
+                                        0,
+                                        0,
+                                        0,
+                                        ZoneOffset.UTC
+                                )
+                        )
+                        .build();
+
+        when(adminShipmentProcessingService.startProcessing(10L))
+                .thenReturn(response);
+
+        mockMvc.perform(
+                        post(START_PROCESSING_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_ADMIN"
+                                        )
+                                ))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shipmentId").value(10))
+                .andExpect(
+                        jsonPath("$.shipmentNumber")
+                                .value("SHP-2026-00010")
+                )
+                .andExpect(
+                        jsonPath("$.processingStage")
+                                .value("CONTAINER_ALLOCATION")
+                )
+                .andExpect(
+                        jsonPath("$.processingStartedAt")
+                                .exists()
+                );
+
+        verify(adminShipmentProcessingService)
+                .startProcessing(10L);
+    }
+
+    @Test
+    void shouldForbidClientFromStartingProcessing()
+            throws Exception {
+
+        mockMvc.perform(
+                        post(START_PROCESSING_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_CLIENT"
+                                        )
+                                ))
+                )
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(adminShipmentProcessingService);
+    }
+
+    @Test
+    void shouldRejectAnonymousProcessingStart()
+            throws Exception {
+
+        mockMvc.perform(
+                        post(START_PROCESSING_ENDPOINT)
+                )
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(adminShipmentProcessingService);
+    }
+
+    @Test
+    void shouldReturnConflictWhenProcessingAlreadyStarted()
+            throws Exception {
+
+        when(adminShipmentProcessingService.startProcessing(10L))
+                .thenThrow(
+                        new InvalidProcessingStageException(
+                                10L,
+                                ProcessingStage.PENDING_ADMIN_REVIEW,
+                                ProcessingStage.CONTAINER_ALLOCATION
+                        )
+                );
+
+        mockMvc.perform(
+                        post(START_PROCESSING_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_ADMIN"
+                                        )
+                                ))
+                )
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(
+                        jsonPath("$.code")
+                                .value("INVALID_PROCESSING_STAGE")
+                )
+                .andExpect(
+                        jsonPath("$.currentStage")
+                                .value("CONTAINER_ALLOCATION")
+                );
+    }
+
+    @Test
+    void shouldAllowAdminToSaveCargoVerification()
+            throws Exception {
+
         CargoVerificationRequest request =
-                createValidRequest();
+                createValidCargoVerificationRequest();
 
         CargoVerificationResponse response =
                 CargoVerificationResponse.builder()
                         .shipmentId(10L)
-                        .action(CargoVerificationAction.SAVE_DRAFT)
+                        .action(
+                                CargoVerificationAction.SAVE_DRAFT
+                        )
                         .processingStage(
                                 ProcessingStage.CARGO_VERIFICATION
                         )
@@ -70,7 +202,7 @@ class AdminShipmentProcessingControllerTest {
         )).thenReturn(response);
 
         mockMvc.perform(
-                        put(ENDPOINT)
+                        put(CARGO_VERIFICATION_ENDPOINT)
                                 .with(jwt().authorities(
                                         new SimpleGrantedAuthority(
                                                 "ROLE_ADMIN"
@@ -102,12 +234,14 @@ class AdminShipmentProcessingControllerTest {
     }
 
     @Test
-    void shouldForbidClientFromCargoVerification() throws Exception {
+    void shouldForbidClientFromCargoVerification()
+            throws Exception {
+
         CargoVerificationRequest request =
-                createValidRequest();
+                createValidCargoVerificationRequest();
 
         mockMvc.perform(
-                        put(ENDPOINT)
+                        put(CARGO_VERIFICATION_ENDPOINT)
                                 .with(jwt().authorities(
                                         new SimpleGrantedAuthority(
                                                 "ROLE_CLIENT"
@@ -126,12 +260,14 @@ class AdminShipmentProcessingControllerTest {
     }
 
     @Test
-    void shouldRejectAnonymousUser() throws Exception {
+    void shouldRejectAnonymousCargoVerification()
+            throws Exception {
+
         CargoVerificationRequest request =
-                createValidRequest();
+                createValidCargoVerificationRequest();
 
         mockMvc.perform(
-                        put(ENDPOINT)
+                        put(CARGO_VERIFICATION_ENDPOINT)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         objectMapper.writeValueAsString(
@@ -145,7 +281,9 @@ class AdminShipmentProcessingControllerTest {
     }
 
     @Test
-    void shouldRejectInvalidRequestBody() throws Exception {
+    void shouldRejectInvalidCargoVerificationRequest()
+            throws Exception {
+
         String invalidRequest = """
                 {
                   "items": []
@@ -153,7 +291,7 @@ class AdminShipmentProcessingControllerTest {
                 """;
 
         mockMvc.perform(
-                        put(ENDPOINT)
+                        put(CARGO_VERIFICATION_ENDPOINT)
                                 .with(jwt().authorities(
                                         new SimpleGrantedAuthority(
                                                 "ROLE_ADMIN"
@@ -185,11 +323,11 @@ class AdminShipmentProcessingControllerTest {
     }
 
     @Test
-    void shouldReturnConflictForIncorrectProcessingStage()
+    void shouldReturnConflictForIncorrectCargoVerificationStage()
             throws Exception {
 
         CargoVerificationRequest request =
-                createValidRequest();
+                createValidCargoVerificationRequest();
 
         when(cargoVerificationService.saveOrConfirm(
                 eq(10L),
@@ -203,7 +341,7 @@ class AdminShipmentProcessingControllerTest {
         );
 
         mockMvc.perform(
-                        put(ENDPOINT)
+                        put(CARGO_VERIFICATION_ENDPOINT)
                                 .with(jwt().authorities(
                                         new SimpleGrantedAuthority(
                                                 "ROLE_ADMIN"
@@ -228,13 +366,13 @@ class AdminShipmentProcessingControllerTest {
                 );
     }
 
-    private CargoVerificationRequest createValidRequest() {
+    private CargoVerificationRequest
+    createValidCargoVerificationRequest() {
+
         return CargoVerificationRequest.builder()
                 .action(CargoVerificationAction.SAVE_DRAFT)
                 .items(List.of(
-                        com.cargosphere.shipment.dto.admin
-                                .CargoVerificationItemRequest
-                                .builder()
+                        CargoVerificationItemRequest.builder()
                                 .cargoDetailId(11L)
                                 .confirmedCargoName(
                                         "Electronics Box"
