@@ -1,5 +1,7 @@
 package com.cargosphere.shipment.service.impl;
 
+import com.cargosphere.shipment.service.support.ProcessingReadinessEvaluator;
+
 import com.cargosphere.shipment.audit.ShipmentAuditPublisher;
 import com.cargosphere.shipment.dto.admin.ProcessingContinueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
@@ -104,7 +106,8 @@ class AdminShipmentProcessingServiceImplTest {
                 cargoVerificationRepository,
                 containerAllocationClient,
                 shipmentDocumentClient,
-                shipmentPaymentClient
+                shipmentPaymentClient,
+                new ProcessingReadinessEvaluator()
         );
     }
 

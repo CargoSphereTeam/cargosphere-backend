@@ -28,6 +28,7 @@ import com.cargosphere.shipment.repository.CargoVerificationRepository;
 import com.cargosphere.shipment.repository.ShipmentEventRepository;
 import com.cargosphere.shipment.repository.ShipmentRepository;
 import com.cargosphere.shipment.service.AdminShipmentProcessingService;
+import com.cargosphere.shipment.service.support.ProcessingReadinessEvaluator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -73,6 +74,9 @@ public class AdminShipmentProcessingServiceImpl
 
     private final ShipmentPaymentClient
             shipmentPaymentClient;
+
+    private final ProcessingReadinessEvaluator
+            processingReadinessEvaluator;
 
     @Override
     public ProcessingStartResponse startProcessing(
@@ -232,65 +236,14 @@ public class AdminShipmentProcessingServiceImpl
                 shipmentPaymentClient
                         .getPaymentsByShipmentId(shipmentId);
 
-        boolean containerReady =
-                isContainerReady(
-                        shipmentId,
-                        allocations
-                );
-
-        boolean cargoReady =
-                isCargoReady(
-                        cargoDetails,
-                        cargoVerifications
-                );
-
-        boolean documentsReady =
-                areDocumentsReady(
-                        shipmentId,
-                        documents
-                );
-
-        boolean paymentReady =
-                isPaymentReady(
-                        shipmentId,
-                        payments
-                );
-
-        boolean processingStageReady =
-                shipment.getProcessingStage()
-                        == ProcessingStage.READY_FOR_EBILL;
-
-        boolean ebillReady =
-                containerReady
-                        && cargoReady
-                        && documentsReady
-                        && paymentReady
-                        && processingStageReady;
-
-        List<String> blockingReasons =
-                buildBlockingReasons(
-                        containerReady,
-                        cargoReady,
-                        documentsReady,
-                        paymentReady,
-                        processingStageReady
-                );
-
-        return ProcessingReadinessResponse.builder()
-                .shipmentId(shipment.getId())
-                .shipmentNumber(
-                        shipment.getShipmentNumber()
-                )
-                .processingStage(
-                        shipment.getProcessingStage()
-                )
-                .containerReady(containerReady)
-                .cargoReady(cargoReady)
-                .documentsReady(documentsReady)
-                .paymentReady(paymentReady)
-                .ebillReady(ebillReady)
-                .blockingReasons(blockingReasons)
-                .build();
+        return processingReadinessEvaluator.evaluate(
+                shipment,
+                allocations,
+                cargoDetails,
+                cargoVerifications,
+                documents,
+                payments
+        );
     }
 
     private boolean isContainerReady(
