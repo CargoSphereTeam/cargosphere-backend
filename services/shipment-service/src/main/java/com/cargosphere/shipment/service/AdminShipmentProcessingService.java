@@ -1,6 +1,7 @@
 package com.cargosphere.shipment.service;
 
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
+import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 
@@ -12,5 +13,9 @@ public interface AdminShipmentProcessingService {
             ProcessingStage processingStage,
             int page,
             int size
+    );
+
+    ProcessingReadinessResponse getProcessingReadiness(
+            Long shipmentId
     );
 }

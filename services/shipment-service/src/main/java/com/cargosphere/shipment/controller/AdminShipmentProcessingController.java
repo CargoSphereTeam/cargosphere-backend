@@ -3,6 +3,7 @@ package com.cargosphere.shipment.controller;
 import com.cargosphere.shipment.dto.admin.CargoVerificationRequest;
 import com.cargosphere.shipment.dto.admin.CargoVerificationResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
+import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.service.AdminShipmentProcessingService;
@@ -118,6 +119,26 @@ public class AdminShipmentProcessingController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/{shipmentId}/processing/readiness")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+            summary = "Get shipment processing readiness",
+            description =
+                    "Calculates container, cargo, document, payment "
+                            + "and eBill readiness for a shipment"
+    )
+    public ResponseEntity<ProcessingReadinessResponse>
+    getProcessingReadiness(
+            @PathVariable
+            @Positive(message = "Shipment ID must be greater than zero")
+            Long shipmentId
+    ) {
+        ProcessingReadinessResponse response =
+                adminShipmentProcessingService
+                        .getProcessingReadiness(shipmentId);
+
+        return ResponseEntity.ok(response);
+    }
     @PutMapping("/{shipmentId}/cargo-verification")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(

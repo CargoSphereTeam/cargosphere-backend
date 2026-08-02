@@ -2,15 +2,27 @@ package com.cargosphere.shipment.service.impl;
 
 import com.cargosphere.shipment.audit.ShipmentAuditPublisher;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
+import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
+import com.cargosphere.shipment.entity.CargoDetail;
+import com.cargosphere.shipment.entity.CargoVerification;
 import com.cargosphere.shipment.entity.Shipment;
 import com.cargosphere.shipment.entity.ShipmentEvent;
+import com.cargosphere.shipment.entity.enums.CargoVerificationStatus;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.entity.enums.ShipmentEventType;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
 import com.cargosphere.shipment.exception.InvalidShipmentOperationException;
 import com.cargosphere.shipment.exception.ResourceNotFoundException;
+import com.cargosphere.shipment.integration.container.ContainerAllocationClient;
+import com.cargosphere.shipment.integration.container.ContainerAllocationResponse;
+import com.cargosphere.shipment.integration.document.ShipmentDocumentClient;
+import com.cargosphere.shipment.integration.document.ShipmentDocumentResponse;
+import com.cargosphere.shipment.integration.payment.ShipmentPaymentClient;
+import com.cargosphere.shipment.integration.payment.ShipmentPaymentResponse;
 import com.cargosphere.shipment.mapper.ShipmentEventMapper;
+import com.cargosphere.shipment.repository.CargoDetailRepository;
+import com.cargosphere.shipment.repository.CargoVerificationRepository;
 import com.cargosphere.shipment.repository.ShipmentEventRepository;
 import com.cargosphere.shipment.repository.ShipmentRepository;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -31,6 +43,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -56,6 +71,25 @@ class AdminShipmentProcessingServiceImplTest {
     @Mock
     private ShipmentAuditPublisher shipmentAuditPublisher;
 
+    @Mock
+    private CargoDetailRepository cargoDetailRepository;
+
+    @Mock
+    private CargoVerificationRepository
+            cargoVerificationRepository;
+
+    @Mock
+    private ContainerAllocationClient
+            containerAllocationClient;
+
+    @Mock
+    private ShipmentDocumentClient
+            shipmentDocumentClient;
+
+    @Mock
+    private ShipmentPaymentClient
+            shipmentPaymentClient;
+
     private AdminShipmentProcessingServiceImpl service;
 
     @BeforeEach
@@ -64,7 +98,12 @@ class AdminShipmentProcessingServiceImplTest {
                 shipmentRepository,
                 shipmentEventRepository,
                 new ShipmentEventMapper(),
-                shipmentAuditPublisher
+                shipmentAuditPublisher,
+                cargoDetailRepository,
+                cargoVerificationRepository,
+                containerAllocationClient,
+                shipmentDocumentClient,
+                shipmentPaymentClient
         );
     }
 
@@ -490,6 +529,242 @@ class AdminShipmentProcessingServiceImplTest {
                 );
     }
 
+    @Test
+    void shouldReportShipmentReadyForEbill() {
+        Shipment shipment = createShipment(
+                ProcessingStage.READY_FOR_EBILL
+        );
+
+        CargoDetail cargoDetail = CargoDetail.builder()
+                .id(20L)
+                .shipment(shipment)
+                .cargoName("Electronics")
+                .build();
+
+        CargoVerification verification =
+                CargoVerification.builder()
+                        .id(30L)
+                        .cargoDetail(cargoDetail)
+                        .verificationStatus(
+                                CargoVerificationStatus.CONFIRMED
+                        )
+                        .verifiedBy(5L)
+                        .verifiedAt(
+                                LocalDateTime.of(
+                                        2026,
+                                        8,
+                                        2,
+                                        10,
+                                        0
+                                )
+                        )
+                        .build();
+
+        ContainerAllocationResponse allocation =
+                new ContainerAllocationResponse(
+                        1L,
+                        10L,
+                        2L,
+                        "DRY_20",
+                        "20 Foot Dry Container",
+                        1,
+                        "ALLOCATED",
+                        null,
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        )
+                );
+
+        ShipmentDocumentResponse document =
+                new ShipmentDocumentResponse(
+                        1L,
+                        10L,
+                        "COMMERCIAL_INVOICE",
+                        true,
+                        "VERIFIED",
+                        5L,
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                10,
+                                0
+                        ),
+                        "Verified",
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                10,
+                                0
+                        )
+                );
+
+        ShipmentPaymentResponse payment =
+                new ShipmentPaymentResponse(
+                        1L,
+                        10L,
+                        100L,
+                        new BigDecimal("12500.00"),
+                        "INR",
+                        "UPI",
+                        "PAID",
+                        "FULL",
+                        "TXN-2026-000123",
+                        LocalDate.of(2026, 8, 15),
+                        LocalDate.of(2026, 8, 2),
+                        "Payment confirmed",
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                10,
+                                0
+                        )
+                );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(containerAllocationClient
+                .getAllocationsByShipmentId(10L))
+                .thenReturn(List.of(allocation));
+
+        when(cargoDetailRepository
+                .findByShipment_Id(10L))
+                .thenReturn(List.of(cargoDetail));
+
+        when(cargoVerificationRepository
+                .findByCargoDetail_Shipment_IdOrderByCargoDetail_IdAsc(
+                        10L
+                ))
+                .thenReturn(List.of(verification));
+
+        when(shipmentDocumentClient
+                .getDocumentsByShipmentId(10L))
+                .thenReturn(List.of(document));
+
+        when(shipmentPaymentClient
+                .getPaymentsByShipmentId(10L))
+                .thenReturn(List.of(payment));
+
+        ProcessingReadinessResponse response =
+                service.getProcessingReadiness(10L);
+
+        assertThat(response.getShipmentId())
+                .isEqualTo(10L);
+
+        assertThat(response.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.READY_FOR_EBILL
+                );
+
+        assertThat(response.isContainerReady())
+                .isTrue();
+
+        assertThat(response.isCargoReady())
+                .isTrue();
+
+        assertThat(response.isDocumentsReady())
+                .isTrue();
+
+        assertThat(response.isPaymentReady())
+                .isTrue();
+
+        assertThat(response.isEbillReady())
+                .isTrue();
+
+        assertThat(response.getBlockingReasons())
+                .isEmpty();
+    }
+    @Test
+    void shouldReportBlockingReasonsWhenRequirementsAreIncomplete() {
+        Shipment shipment = createShipment(
+                ProcessingStage.READY_FOR_EBILL
+        );
+
+        CargoDetail cargoDetail = CargoDetail.builder()
+                .id(20L)
+                .shipment(shipment)
+                .cargoName("Electronics")
+                .build();
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(containerAllocationClient
+                .getAllocationsByShipmentId(10L))
+                .thenReturn(List.of());
+
+        when(cargoDetailRepository
+                .findByShipment_Id(10L))
+                .thenReturn(List.of(cargoDetail));
+
+        when(cargoVerificationRepository
+                .findByCargoDetail_Shipment_IdOrderByCargoDetail_IdAsc(
+                        10L
+                ))
+                .thenReturn(List.of());
+
+        when(shipmentDocumentClient
+                .getDocumentsByShipmentId(10L))
+                .thenReturn(List.of());
+
+        when(shipmentPaymentClient
+                .getPaymentsByShipmentId(10L))
+                .thenReturn(List.of());
+
+        ProcessingReadinessResponse response =
+                service.getProcessingReadiness(10L);
+
+        assertThat(response.isContainerReady())
+                .isFalse();
+
+        assertThat(response.isCargoReady())
+                .isFalse();
+
+        assertThat(response.isDocumentsReady())
+                .isFalse();
+
+        assertThat(response.isPaymentReady())
+                .isFalse();
+
+        assertThat(response.isEbillReady())
+                .isFalse();
+
+        assertThat(response.getBlockingReasons())
+                .containsExactly(
+                        "No valid container allocation exists",
+                        "All shipment cargo items must be confirmed",
+                        "All required shipment documents must be verified",
+                        "At least one valid PAID payment is required"
+                );
+    }
     private Shipment createShipment(
             ProcessingStage processingStage
     ) {

@@ -7,6 +7,7 @@ import com.cargosphere.shipment.dto.admin.CargoVerificationRequest;
 import com.cargosphere.shipment.dto.admin.CargoVerificationResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueItemResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
+import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
@@ -52,6 +53,8 @@ class AdminShipmentProcessingControllerTest {
     private static final String PROCESSING_QUEUE_ENDPOINT =
             "/api/admin/shipments/processing/queue";
 
+    private static final String PROCESSING_READINESS_ENDPOINT =
+            "/api/admin/shipments/10/processing/readiness";
     @Autowired
     private MockMvc mockMvc;
 
@@ -541,6 +544,106 @@ class AdminShipmentProcessingControllerTest {
         verifyNoInteractions(adminShipmentProcessingService);
     }
 
+    @Test
+    void shouldAllowAdminToGetProcessingReadiness()
+            throws Exception {
+
+        ProcessingReadinessResponse response =
+                ProcessingReadinessResponse.builder()
+                        .shipmentId(10L)
+                        .shipmentNumber("SHP-2026-00010")
+                        .processingStage(
+                                ProcessingStage.READY_FOR_EBILL
+                        )
+                        .containerReady(true)
+                        .cargoReady(true)
+                        .documentsReady(true)
+                        .paymentReady(true)
+                        .ebillReady(true)
+                        .blockingReasons(List.of())
+                        .build();
+
+        when(adminShipmentProcessingService
+                .getProcessingReadiness(10L))
+                .thenReturn(response);
+
+        mockMvc.perform(
+                        get(PROCESSING_READINESS_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_ADMIN"
+                                        )
+                                ))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shipmentId").value(10))
+                .andExpect(
+                        jsonPath("$.shipmentNumber")
+                                .value("SHP-2026-00010")
+                )
+                .andExpect(
+                        jsonPath("$.processingStage")
+                                .value("READY_FOR_EBILL")
+                )
+                .andExpect(
+                        jsonPath("$.containerReady")
+                                .value(true)
+                )
+                .andExpect(
+                        jsonPath("$.cargoReady")
+                                .value(true)
+                )
+                .andExpect(
+                        jsonPath("$.documentsReady")
+                                .value(true)
+                )
+                .andExpect(
+                        jsonPath("$.paymentReady")
+                                .value(true)
+                )
+                .andExpect(
+                        jsonPath("$.ebillReady")
+                                .value(true)
+                )
+                .andExpect(
+                        jsonPath("$.blockingReasons")
+                                .isEmpty()
+                );
+
+        verify(adminShipmentProcessingService)
+                .getProcessingReadiness(10L);
+    }
+    @Test
+    void shouldForbidClientFromProcessingReadiness()
+            throws Exception {
+
+        mockMvc.perform(
+                        get(PROCESSING_READINESS_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_CLIENT"
+                                        )
+                                ))
+                )
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(
+                adminShipmentProcessingService
+        );
+    }
+    @Test
+    void shouldRejectAnonymousProcessingReadinessRequest()
+            throws Exception {
+
+        mockMvc.perform(
+                        get(PROCESSING_READINESS_ENDPOINT)
+                )
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(
+                adminShipmentProcessingService
+        );
+    }
     private CargoVerificationRequest
     createValidCargoVerificationRequest() {
 

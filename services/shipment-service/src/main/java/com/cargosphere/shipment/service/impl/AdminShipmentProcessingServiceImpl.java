@@ -3,15 +3,27 @@ package com.cargosphere.shipment.service.impl;
 import com.cargosphere.shipment.audit.ShipmentAuditPublisher;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueItemResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
+import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
+import com.cargosphere.shipment.entity.CargoDetail;
+import com.cargosphere.shipment.entity.CargoVerification;
 import com.cargosphere.shipment.entity.Shipment;
 import com.cargosphere.shipment.entity.ShipmentEvent;
+import com.cargosphere.shipment.entity.enums.CargoVerificationStatus;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.entity.enums.ShipmentEventType;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
 import com.cargosphere.shipment.exception.InvalidShipmentOperationException;
 import com.cargosphere.shipment.exception.ResourceNotFoundException;
+import com.cargosphere.shipment.integration.container.ContainerAllocationClient;
+import com.cargosphere.shipment.integration.container.ContainerAllocationResponse;
+import com.cargosphere.shipment.integration.document.ShipmentDocumentClient;
+import com.cargosphere.shipment.integration.document.ShipmentDocumentResponse;
+import com.cargosphere.shipment.integration.payment.ShipmentPaymentClient;
+import com.cargosphere.shipment.integration.payment.ShipmentPaymentResponse;
 import com.cargosphere.shipment.mapper.ShipmentEventMapper;
+import com.cargosphere.shipment.repository.CargoDetailRepository;
+import com.cargosphere.shipment.repository.CargoVerificationRepository;
 import com.cargosphere.shipment.repository.ShipmentEventRepository;
 import com.cargosphere.shipment.repository.ShipmentRepository;
 import com.cargosphere.shipment.service.AdminShipmentProcessingService;
@@ -24,9 +36,12 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -44,17 +59,25 @@ public class AdminShipmentProcessingServiceImpl
 
     private final ShipmentAuditPublisher shipmentAuditPublisher;
 
+    private final CargoDetailRepository cargoDetailRepository;
+
+    private final CargoVerificationRepository
+            cargoVerificationRepository;
+
+    private final ContainerAllocationClient
+            containerAllocationClient;
+
+    private final ShipmentDocumentClient
+            shipmentDocumentClient;
+
+    private final ShipmentPaymentClient
+            shipmentPaymentClient;
+
     @Override
     public ProcessingStartResponse startProcessing(
             Long shipmentId
     ) {
-        Shipment shipment = shipmentRepository.findById(shipmentId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Shipment not found with id: "
-                                        + shipmentId
-                        )
-                );
+        Shipment shipment = findShipmentById(shipmentId);
 
         validateCurrentStage(shipment);
 
@@ -135,6 +158,266 @@ public class AdminShipmentProcessingServiceImpl
                 .last(shipmentPage.isLast())
                 .empty(shipmentPage.isEmpty())
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProcessingReadinessResponse getProcessingReadiness(
+            Long shipmentId
+    ) {
+        Shipment shipment = findShipmentById(shipmentId);
+
+        List<ContainerAllocationResponse> allocations =
+                containerAllocationClient
+                        .getAllocationsByShipmentId(shipmentId);
+
+        List<CargoDetail> cargoDetails =
+                cargoDetailRepository
+                        .findByShipment_Id(shipmentId);
+
+        List<CargoVerification> cargoVerifications =
+                cargoVerificationRepository
+                        .findByCargoDetail_Shipment_IdOrderByCargoDetail_IdAsc(
+                                shipmentId
+                        );
+
+        List<ShipmentDocumentResponse> documents =
+                shipmentDocumentClient
+                        .getDocumentsByShipmentId(shipmentId);
+
+        List<ShipmentPaymentResponse> payments =
+                shipmentPaymentClient
+                        .getPaymentsByShipmentId(shipmentId);
+
+        boolean containerReady =
+                isContainerReady(
+                        shipmentId,
+                        allocations
+                );
+
+        boolean cargoReady =
+                isCargoReady(
+                        cargoDetails,
+                        cargoVerifications
+                );
+
+        boolean documentsReady =
+                areDocumentsReady(
+                        shipmentId,
+                        documents
+                );
+
+        boolean paymentReady =
+                isPaymentReady(
+                        shipmentId,
+                        payments
+                );
+
+        boolean processingStageReady =
+                shipment.getProcessingStage()
+                        == ProcessingStage.READY_FOR_EBILL;
+
+        boolean ebillReady =
+                containerReady
+                        && cargoReady
+                        && documentsReady
+                        && paymentReady
+                        && processingStageReady;
+
+        List<String> blockingReasons =
+                buildBlockingReasons(
+                        containerReady,
+                        cargoReady,
+                        documentsReady,
+                        paymentReady,
+                        processingStageReady
+                );
+
+        return ProcessingReadinessResponse.builder()
+                .shipmentId(shipment.getId())
+                .shipmentNumber(
+                        shipment.getShipmentNumber()
+                )
+                .processingStage(
+                        shipment.getProcessingStage()
+                )
+                .containerReady(containerReady)
+                .cargoReady(cargoReady)
+                .documentsReady(documentsReady)
+                .paymentReady(paymentReady)
+                .ebillReady(ebillReady)
+                .blockingReasons(blockingReasons)
+                .build();
+    }
+
+    private boolean isContainerReady(
+            Long shipmentId,
+            List<ContainerAllocationResponse> allocations
+    ) {
+        return allocations.stream()
+                .anyMatch(allocation ->
+                        allocation != null
+                                && allocation.allocationId()
+                                != null
+                                && Objects.equals(
+                                allocation.shipmentId(),
+                                shipmentId
+                        )
+                                && allocation.containerTypeId()
+                                != null
+                                && allocation.quantity()
+                                != null
+                                && allocation.quantity() >= 1
+                );
+    }
+
+    private boolean isCargoReady(
+            List<CargoDetail> cargoDetails,
+            List<CargoVerification> verifications
+    ) {
+        if (cargoDetails.isEmpty()) {
+            return false;
+        }
+
+        return cargoDetails.stream()
+                .allMatch(cargoDetail ->
+                        hasConfirmedVerification(
+                                cargoDetail,
+                                verifications
+                        )
+                );
+    }
+
+    private boolean hasConfirmedVerification(
+            CargoDetail cargoDetail,
+            List<CargoVerification> verifications
+    ) {
+        return verifications.stream()
+                .anyMatch(verification ->
+                        verification != null
+                                && verification
+                                .getCargoDetail() != null
+                                && Objects.equals(
+                                verification
+                                        .getCargoDetail()
+                                        .getId(),
+                                cargoDetail.getId()
+                        )
+                                && verification
+                                .getVerificationStatus()
+                                == CargoVerificationStatus.CONFIRMED
+                                && verification.getVerifiedBy()
+                                != null
+                                && verification.getVerifiedAt()
+                                != null
+                );
+    }
+
+    private boolean areDocumentsReady(
+            Long shipmentId,
+            List<ShipmentDocumentResponse> documents
+    ) {
+        if (documents.isEmpty()) {
+            return false;
+        }
+
+        return documents.stream()
+                .allMatch(document -> {
+                    if (document == null
+                            || document.id() == null
+                            || !Objects.equals(
+                            document.shipmentId(),
+                            shipmentId
+                    )) {
+                        return false;
+                    }
+
+                    if (!Boolean.TRUE.equals(
+                            document.required()
+                    )) {
+                        return true;
+                    }
+
+                    return "VERIFIED".equalsIgnoreCase(
+                            document.verificationStatus()
+                    )
+                            && document.verifiedBy() != null
+                            && document.verifiedAt() != null;
+                });
+    }
+
+    private boolean isPaymentReady(
+            Long shipmentId,
+            List<ShipmentPaymentResponse> payments
+    ) {
+        return payments.stream()
+                .anyMatch(payment ->
+                        payment != null
+                                && payment.id() != null
+                                && Objects.equals(
+                                payment.shipmentId(),
+                                shipmentId
+                        )
+                                && payment.amount() != null
+                                && payment.amount()
+                                .compareTo(BigDecimal.ZERO) > 0
+                                && "PAID".equalsIgnoreCase(
+                                payment.paymentStatus()
+                        )
+                                && payment.paidDate() != null
+                );
+    }
+
+    private List<String> buildBlockingReasons(
+            boolean containerReady,
+            boolean cargoReady,
+            boolean documentsReady,
+            boolean paymentReady,
+            boolean processingStageReady
+    ) {
+        List<String> reasons = new ArrayList<>();
+
+        if (!containerReady) {
+            reasons.add(
+                    "No valid container allocation exists"
+            );
+        }
+
+        if (!cargoReady) {
+            reasons.add(
+                    "All shipment cargo items must be confirmed"
+            );
+        }
+
+        if (!documentsReady) {
+            reasons.add(
+                    "All required shipment documents must be verified"
+            );
+        }
+
+        if (!paymentReady) {
+            reasons.add(
+                    "At least one valid PAID payment is required"
+            );
+        }
+
+        if (!processingStageReady) {
+            reasons.add(
+                    "Processing stage must be READY_FOR_EBILL"
+            );
+        }
+
+        return List.copyOf(reasons);
+    }
+
+    private Shipment findShipmentById(Long shipmentId) {
+        return shipmentRepository.findById(shipmentId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Shipment not found with id: "
+                                        + shipmentId
+                        )
+                );
     }
 
     private void validatePagination(
