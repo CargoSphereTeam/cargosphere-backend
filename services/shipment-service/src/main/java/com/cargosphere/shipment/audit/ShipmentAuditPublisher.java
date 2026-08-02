@@ -24,11 +24,10 @@ public class ShipmentAuditPublisher {
                 shipmentActorProvider.getCurrentActor();
 
         AuditEventRequest event =
-                shipmentAuditEventFactory
-                        .shipmentCreated(
-                                shipment,
-                                actor
-                        );
+                shipmentAuditEventFactory.shipmentCreated(
+                        shipment,
+                        actor
+                );
 
         auditClient.publish(event);
     }
@@ -47,6 +46,21 @@ public class ShipmentAuditPublisher {
                                 previousStatus,
                                 actor
                         );
+
+        auditClient.publish(event);
+    }
+
+    public void publishCargoVerified(
+            Shipment shipment
+    ) {
+        CurrentActor actor =
+                shipmentActorProvider.getCurrentActor();
+
+        AuditEventRequest event =
+                shipmentAuditEventFactory.cargoVerified(
+                        shipment,
+                        actor
+                );
 
         auditClient.publish(event);
     }

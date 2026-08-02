@@ -55,6 +55,23 @@ public class ShipmentAuditEventFactory {
         );
     }
 
+    public AuditEventRequest cargoVerified(
+            Shipment shipment,
+            CurrentActor actor
+    ) {
+        return create(
+                shipment,
+                actor,
+                "CARGO_VERIFIED",
+                "Shipment cargo verification confirmed successfully",
+                "PUT",
+                "/api/admin/shipments/"
+                        + shipment.getId()
+                        + "/cargo-verification",
+                200
+        );
+    }
+
     private AuditEventRequest create(
             Shipment shipment,
             CurrentActor actor,
