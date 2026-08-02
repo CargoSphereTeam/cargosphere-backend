@@ -1,28 +1,45 @@
 package com.cargosphere.shipment.service.impl;
 
 import com.cargosphere.shipment.audit.ShipmentAuditPublisher;
+import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.entity.Shipment;
 import com.cargosphere.shipment.entity.ShipmentEvent;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.entity.enums.ShipmentEventType;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
+import com.cargosphere.shipment.exception.InvalidShipmentOperationException;
 import com.cargosphere.shipment.exception.ResourceNotFoundException;
 import com.cargosphere.shipment.mapper.ShipmentEventMapper;
 import com.cargosphere.shipment.repository.ShipmentEventRepository;
 import com.cargosphere.shipment.repository.ShipmentRepository;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -151,8 +168,7 @@ class AdminShipmentProcessingServiceImplTest {
 
         verify(shipmentEventRepository, never())
                 .save(
-                        org.mockito.ArgumentMatchers
-                                .any(ShipmentEvent.class)
+                        any(ShipmentEvent.class)
                 );
 
         verify(shipmentAuditPublisher, never())
@@ -176,8 +192,7 @@ class AdminShipmentProcessingServiceImplTest {
 
         verify(shipmentRepository, never())
                 .save(
-                        org.mockito.ArgumentMatchers
-                                .any(Shipment.class)
+                        any(Shipment.class)
                 );
 
         verifyNoProcessingSideEffects();
@@ -212,12 +227,267 @@ class AdminShipmentProcessingServiceImplTest {
 
         verify(shipmentEventRepository, never())
                 .save(
-                        org.mockito.ArgumentMatchers
-                                .any(ShipmentEvent.class)
+                        any(ShipmentEvent.class)
                 );
 
         verify(shipmentAuditPublisher)
                 .publishAdminProcessingStarted(shipment);
+    }
+
+    @Test
+    void shouldReturnPaginatedProcessingQueueOldestFirst() {
+        Shipment firstShipment = Shipment.builder()
+                .id(10L)
+                .shipmentNumber("SHP-2026-00010")
+                .clientUserId(100L)
+                .originLocation("Mumbai")
+                .destinationLocation("Pune")
+                .processingStage(
+                        ProcessingStage.PENDING_ADMIN_REVIEW
+                )
+                .createdAt(
+                        OffsetDateTime.parse(
+                                "2026-08-01T08:00:00Z"
+                        )
+                )
+                .updatedAt(
+                        OffsetDateTime.parse(
+                                "2026-08-01T08:00:00Z"
+                        )
+                )
+                .build();
+
+        Shipment secondShipment = Shipment.builder()
+                .id(11L)
+                .shipmentNumber("SHP-2026-00011")
+                .clientUserId(101L)
+                .originLocation("Delhi")
+                .destinationLocation("Jaipur")
+                .processingStage(
+                        ProcessingStage.CONTAINER_ALLOCATION
+                )
+                .createdAt(
+                        OffsetDateTime.parse(
+                                "2026-08-01T09:00:00Z"
+                        )
+                )
+                .updatedAt(
+                        OffsetDateTime.parse(
+                                "2026-08-01T09:00:00Z"
+                        )
+                )
+                .build();
+
+        Page<Shipment> shipmentPage =
+                new PageImpl<>(
+                        List.of(
+                                firstShipment,
+                                secondShipment
+                        ),
+                        PageRequest.of(0, 20),
+                        2
+                );
+
+        when(shipmentRepository.findAll(
+                any(Specification.class),
+                any(Pageable.class)
+        )).thenReturn(shipmentPage);
+
+        ProcessingQueueResponse response =
+                service.getProcessingQueue(
+                        null,
+                        0,
+                        20
+                );
+
+        assertThat(response.getItems())
+                .hasSize(2);
+
+        assertThat(response.getItems().get(0)
+                .getShipmentId())
+                .isEqualTo(10L);
+
+        assertThat(response.getItems().get(1)
+                .getShipmentId())
+                .isEqualTo(11L);
+
+        assertThat(response.getPage())
+                .isZero();
+
+        assertThat(response.getSize())
+                .isEqualTo(20);
+
+        assertThat(response.getTotalElements())
+                .isEqualTo(2);
+
+        assertThat(response.getTotalPages())
+                .isEqualTo(1);
+
+        assertThat(response.isFirst())
+                .isTrue();
+
+        assertThat(response.isLast())
+                .isTrue();
+
+        assertThat(response.isEmpty())
+                .isFalse();
+
+        ArgumentCaptor<Pageable> pageableCaptor =
+                ArgumentCaptor.forClass(
+                        Pageable.class
+                );
+
+        verify(shipmentRepository).findAll(
+                any(Specification.class),
+                pageableCaptor.capture()
+        );
+
+        Pageable pageable =
+                pageableCaptor.getValue();
+
+        assertThat(pageable.getPageNumber())
+                .isZero();
+
+        assertThat(pageable.getPageSize())
+                .isEqualTo(20);
+
+        Sort.Order createdAtOrder =
+                pageable.getSort()
+                        .getOrderFor("createdAt");
+
+        Sort.Order idOrder =
+                pageable.getSort()
+                        .getOrderFor("id");
+
+        assertThat(createdAtOrder)
+                .isNotNull();
+
+        assertThat(createdAtOrder.getDirection())
+                .isEqualTo(Sort.Direction.ASC);
+
+        assertThat(idOrder)
+                .isNotNull();
+
+        assertThat(idOrder.getDirection())
+                .isEqualTo(Sort.Direction.ASC);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shouldFilterProcessingQueueByStage() {
+        Page<Shipment> emptyPage =
+                Page.empty(
+                        PageRequest.of(0, 20)
+                );
+
+        when(shipmentRepository.findAll(
+                any(Specification.class),
+                any(Pageable.class)
+        )).thenReturn(emptyPage);
+
+        service.getProcessingQueue(
+                ProcessingStage.CARGO_VERIFICATION,
+                0,
+                20
+        );
+
+        ArgumentCaptor<Specification<Shipment>>
+                specificationCaptor =
+                ArgumentCaptor.forClass(
+                        Specification.class
+                );
+
+        verify(shipmentRepository).findAll(
+                specificationCaptor.capture(),
+                any(Pageable.class)
+        );
+
+        Root<Shipment> root =
+                mock(Root.class);
+
+        CriteriaQuery<?> query =
+                mock(CriteriaQuery.class);
+
+        CriteriaBuilder criteriaBuilder =
+                mock(CriteriaBuilder.class);
+
+        Path<ProcessingStage> stagePath =
+                mock(Path.class);
+
+        Predicate expectedPredicate =
+                mock(Predicate.class);
+
+        when(root.<ProcessingStage>get(
+                "processingStage"
+        )).thenReturn(stagePath);
+
+        when(criteriaBuilder.equal(
+                stagePath,
+                ProcessingStage.CARGO_VERIFICATION
+        )).thenReturn(expectedPredicate);
+
+        Predicate actualPredicate =
+                specificationCaptor
+                        .getValue()
+                        .toPredicate(
+                                root,
+                                query,
+                                criteriaBuilder
+                        );
+
+        assertThat(actualPredicate)
+                .isSameAs(expectedPredicate);
+
+        verify(criteriaBuilder).equal(
+                stagePath,
+                ProcessingStage.CARGO_VERIFICATION
+        );
+    }
+
+    @Test
+    void shouldRejectNegativeProcessingQueuePage() {
+        assertThatThrownBy(() ->
+                service.getProcessingQueue(
+                        null,
+                        -1,
+                        20
+                )
+        )
+                .isInstanceOf(
+                        InvalidShipmentOperationException.class
+                )
+                .hasMessageContaining(
+                        "Page number must be zero or greater"
+                );
+
+        verify(shipmentRepository, never())
+                .findAll(
+                        any(Specification.class),
+                        any(Pageable.class)
+                );
+    }
+
+    @Test
+    void shouldRejectProcessingQueueSizeAboveMaximum() {
+        assertThatThrownBy(() ->
+                service.getProcessingQueue(
+                        null,
+                        0,
+                        101
+                )
+        )
+                .isInstanceOf(
+                        InvalidShipmentOperationException.class
+                )
+                .hasMessageContaining(
+                        "Page size must be between 1 and 100"
+                );
+
+        verify(shipmentRepository, never())
+                .findAll(
+                        any(Specification.class),
+                        any(Pageable.class)
+                );
     }
 
     private Shipment createShipment(
@@ -236,14 +506,12 @@ class AdminShipmentProcessingServiceImplTest {
     private void verifyNoProcessingSideEffects() {
         verify(shipmentEventRepository, never())
                 .save(
-                        org.mockito.ArgumentMatchers
-                                .any(ShipmentEvent.class)
+                        any(ShipmentEvent.class)
                 );
 
         verify(shipmentAuditPublisher, never())
                 .publishAdminProcessingStarted(
-                        org.mockito.ArgumentMatchers
-                                .any(Shipment.class)
+                        any(Shipment.class)
                 );
     }
 }

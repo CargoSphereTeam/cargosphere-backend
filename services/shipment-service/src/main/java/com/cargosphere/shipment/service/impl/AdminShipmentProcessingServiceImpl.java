@@ -1,29 +1,40 @@
 package com.cargosphere.shipment.service.impl;
 
 import com.cargosphere.shipment.audit.ShipmentAuditPublisher;
+import com.cargosphere.shipment.dto.admin.ProcessingQueueItemResponse;
+import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.entity.Shipment;
 import com.cargosphere.shipment.entity.ShipmentEvent;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.entity.enums.ShipmentEventType;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
+import com.cargosphere.shipment.exception.InvalidShipmentOperationException;
 import com.cargosphere.shipment.exception.ResourceNotFoundException;
 import com.cargosphere.shipment.mapper.ShipmentEventMapper;
 import com.cargosphere.shipment.repository.ShipmentEventRepository;
 import com.cargosphere.shipment.repository.ShipmentRepository;
 import com.cargosphere.shipment.service.AdminShipmentProcessingService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class AdminShipmentProcessingServiceImpl
         implements AdminShipmentProcessingService {
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final ShipmentRepository shipmentRepository;
 
@@ -73,6 +84,136 @@ public class AdminShipmentProcessingServiceImpl
                 )
                 .processingStartedAt(
                         savedShipment.getProcessingStartedAt()
+                )
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProcessingQueueResponse getProcessingQueue(
+            ProcessingStage processingStage,
+            int page,
+            int size
+    ) {
+        validatePagination(page, size);
+
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(
+                        Sort.Order.asc("createdAt"),
+                        Sort.Order.asc("id")
+                )
+        );
+
+        Specification<Shipment> specification =
+                createQueueSpecification(processingStage);
+
+        Page<Shipment> shipmentPage =
+                shipmentRepository.findAll(
+                        specification,
+                        pageable
+                );
+
+        List<ProcessingQueueItemResponse> items =
+                shipmentPage.getContent()
+                        .stream()
+                        .map(this::toQueueItemResponse)
+                        .toList();
+
+        return ProcessingQueueResponse.builder()
+                .items(items)
+                .page(shipmentPage.getNumber())
+                .size(shipmentPage.getSize())
+                .totalElements(
+                        shipmentPage.getTotalElements()
+                )
+                .totalPages(
+                        shipmentPage.getTotalPages()
+                )
+                .first(shipmentPage.isFirst())
+                .last(shipmentPage.isLast())
+                .empty(shipmentPage.isEmpty())
+                .build();
+    }
+
+    private void validatePagination(
+            int page,
+            int size
+    ) {
+        if (page < 0) {
+            throw new InvalidShipmentOperationException(
+                    "Page number must be zero or greater"
+            );
+        }
+
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new InvalidShipmentOperationException(
+                    "Page size must be between 1 and "
+                            + MAX_PAGE_SIZE
+            );
+        }
+    }
+
+    private Specification<Shipment>
+    createQueueSpecification(
+            ProcessingStage processingStage
+    ) {
+        return (root, query, criteriaBuilder) -> {
+            if (processingStage == null) {
+                return criteriaBuilder.conjunction();
+            }
+
+            return criteriaBuilder.equal(
+                    root.get("processingStage"),
+                    processingStage
+            );
+        };
+    }
+
+    private ProcessingQueueItemResponse toQueueItemResponse(
+            Shipment shipment
+    ) {
+        return ProcessingQueueItemResponse.builder()
+                .shipmentId(shipment.getId())
+                .shipmentNumber(
+                        shipment.getShipmentNumber()
+                )
+                .clientUserId(
+                        shipment.getClientUserId()
+                )
+                .originLocation(
+                        shipment.getOriginLocation()
+                )
+                .destinationLocation(
+                        shipment.getDestinationLocation()
+                )
+                .shipmentType(
+                        shipment.getShipmentType()
+                )
+                .shipmentStatus(
+                        shipment.getStatus()
+                )
+                .processingStage(
+                        shipment.getProcessingStage()
+                )
+                .expectedPickupDate(
+                        shipment.getExpectedPickupDate()
+                )
+                .expectedDeliveryDate(
+                        shipment.getExpectedDeliveryDate()
+                )
+                .processingStartedAt(
+                        shipment.getProcessingStartedAt()
+                )
+                .processingCompletedAt(
+                        shipment.getProcessingCompletedAt()
+                )
+                .createdAt(
+                        shipment.getCreatedAt()
+                )
+                .updatedAt(
+                        shipment.getUpdatedAt()
                 )
                 .build();
     }
