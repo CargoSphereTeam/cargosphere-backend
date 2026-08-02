@@ -63,6 +63,11 @@ app:
     connect-timeout: ${CONTAINER_CONNECT_TIMEOUT:PT2S}
     read-timeout: ${CONTAINER_READ_TIMEOUT:PT3S}
 
+  document-client:
+    base-url: ${DOCUMENT_SERVICE_URL:http://localhost:8084}
+    connect-timeout: ${DOCUMENT_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${DOCUMENT_READ_TIMEOUT:PT3S}
+
 springdoc:
   api-docs:
     path: /v3/api-docs
