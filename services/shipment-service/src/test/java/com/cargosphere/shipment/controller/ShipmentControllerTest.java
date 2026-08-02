@@ -549,8 +549,8 @@ class ShipmentControllerTest {
                 .originLocation("Mumbai")
                 .destinationLocation("Pune")
                 .shipmentType(ShipmentType.ROAD)
-                .expectedPickupDate(LocalDate.of(2026, 8, 1))
-                .expectedDeliveryDate(LocalDate.of(2026, 8, 5))
+                .expectedPickupDate(LocalDate.now().plusDays(1))
+                .expectedDeliveryDate(LocalDate.now().plusDays(5))
                 .build();
     }
 
