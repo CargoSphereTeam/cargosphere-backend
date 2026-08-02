@@ -146,6 +146,31 @@ public class GlobalExceptionHandler {
                 .body(response);
     }
 
+    @ExceptionHandler(DownstreamServiceException.class)
+    public ResponseEntity<ApiErrorResponse>
+    handleDownstreamServiceException(
+            DownstreamServiceException exception,
+            HttpServletRequest request
+    ) {
+        ApiErrorResponse response = ApiErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(
+                        HttpStatus.SERVICE_UNAVAILABLE.value()
+                )
+                .error(
+                        HttpStatus.SERVICE_UNAVAILABLE
+                                .getReasonPhrase()
+                )
+                .message(exception.getMessage())
+                .path(request.getRequestURI())
+                .validationErrors(null)
+                .code("DOWNSTREAM_SERVICE_UNAVAILABLE")
+                .build();
+
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(response);
+    }
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleGeneralException(
             Exception exception,
