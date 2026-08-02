@@ -1,9 +1,12 @@
 package com.cargosphere.shipment.entity;
 
+import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.entity.enums.ShipmentStatus;
 import com.cargosphere.shipment.entity.enums.ShipmentType;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -30,6 +33,10 @@ import java.time.ZoneOffset;
                 @Index(
                         name = "idx_shipments_shipment_number",
                         columnList = "shipment_number"
+                ),
+                @Index(
+                        name = "idx_shipments_processing_stage",
+                        columnList = "processing_stage"
                 )
         }
 )
@@ -87,6 +94,45 @@ public class Shipment {
     @Column(name = "expected_delivery_date")
     private LocalDate expectedDeliveryDate;
 
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(
+            name = "processing_stage",
+            nullable = false,
+            length = 40
+    )
+    private ProcessingStage processingStage =
+            ProcessingStage.PENDING_ADMIN_REVIEW;
+
+    @Column(name = "processing_started_at")
+    private OffsetDateTime processingStartedAt;
+
+    @Column(name = "processing_completed_at")
+    private OffsetDateTime processingCompletedAt;
+
+    @Column(
+            name = "ebill_number",
+            unique = true,
+            length = 50
+    )
+    private String ebillNumber;
+
+    @Column(name = "ebill_version")
+    private Integer ebillVersion;
+
+    @Column(name = "ebill_generated_at")
+    private OffsetDateTime ebillGeneratedAt;
+
+    @Column(name = "ebill_generated_by")
+    private Long ebillGeneratedBy;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(
+            name = "ebill_snapshot",
+            columnDefinition = "jsonb"
+    )
+    private String ebillSnapshot;
+
     @Column(
             name = "created_at",
             nullable = false,
@@ -109,6 +155,11 @@ public class Shipment {
 
         if (this.status == null) {
             this.status = ShipmentStatus.CREATED;
+        }
+
+        if (this.processingStage == null) {
+            this.processingStage =
+                    ProcessingStage.PENDING_ADMIN_REVIEW;
         }
     }
 
