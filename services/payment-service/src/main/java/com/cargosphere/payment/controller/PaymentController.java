@@ -1,6 +1,8 @@
 package com.cargosphere.payment.controller;
 
 import com.cargosphere.payment.config.OpenApiConfig;
+import com.cargosphere.payment.dto.ShipmentPaymentSummaryRequest;
+import com.cargosphere.payment.dto.ShipmentPaymentSummaryResponse;
 import com.cargosphere.payment.dto.CreatePaymentRequest;
 import com.cargosphere.payment.dto.ErrorResponse;
 import com.cargosphere.payment.dto.PaymentResponse;
@@ -469,6 +471,143 @@ public class PaymentController {
                 paymentService.refundPayment(
                         paymentId,
                         request
+                )
+        );
+    }
+
+
+    @Operation(
+            summary = "Get shipment payment summary",
+            description =
+                    "Returns the payment summary for a shipment. "
+                            + "Requires ROLE_ADMIN."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Shipment payment summary returned successfully",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation =
+                                            ShipmentPaymentSummaryResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "JWT is missing or invalid"
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "ADMIN role is required"
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Shipment payment summary not found",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation =
+                                            ErrorResponse.class
+                            )
+                    )
+            )
+    })
+
+    @GetMapping("/shipments/{shipmentId}/payment-summary")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ShipmentPaymentSummaryResponse>
+    getShipmentPaymentSummary(
+            @PathVariable Long shipmentId
+    ) {
+        return ResponseEntity.ok(
+                paymentService.getShipmentPaymentSummary(
+                        shipmentId
+                )
+        );
+    }
+
+
+    @Operation(
+            summary = "Save or confirm shipment payment summary",
+            description =
+                    "Saves a payment summary as a draft or confirms it. "
+                            + "Requires ROLE_ADMIN."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Shipment payment summary processed successfully",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation =
+                                            ShipmentPaymentSummaryResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Request validation failed",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation =
+                                            ErrorResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "JWT is missing or invalid"
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "ADMIN role is required"
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Shipment payment summary not found",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation =
+                                            ErrorResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Payment summary is already confirmed",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation =
+                                            ErrorResponse.class
+                            )
+                    )
+            )
+    })
+
+
+    @PostMapping("/shipments/{shipmentId}/payment-summary")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ShipmentPaymentSummaryResponse>
+    saveShipmentPaymentSummary(
+            @PathVariable Long shipmentId,
+
+            @Valid
+            @RequestBody
+            ShipmentPaymentSummaryRequest request,
+
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal
+            Jwt jwt
+    ) {
+
+        Long adminId =
+                jwtUserIdExtractor.extractUserId(jwt);
+
+        return ResponseEntity.ok(
+                paymentService.saveShipmentPaymentSummary(
+                        shipmentId,
+                        request,
+                        adminId
                 )
         );
     }

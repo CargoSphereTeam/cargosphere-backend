@@ -1,5 +1,7 @@
 package com.cargosphere.payment.service;
 
+import com.cargosphere.payment.dto.ShipmentPaymentSummaryRequest;
+import com.cargosphere.payment.dto.ShipmentPaymentSummaryResponse;
 import com.cargosphere.payment.dto.CreatePaymentRequest;
 import com.cargosphere.payment.dto.PaymentResponse;
 import com.cargosphere.payment.dto.RefundPaymentRequest;
@@ -34,5 +36,15 @@ public interface PaymentService {
     PaymentResponse refundPayment(
             Long paymentId,
             RefundPaymentRequest request
+    );
+
+    ShipmentPaymentSummaryResponse getShipmentPaymentSummary(
+            Long shipmentId
+    );
+
+    ShipmentPaymentSummaryResponse saveShipmentPaymentSummary(
+            Long shipmentId,
+            ShipmentPaymentSummaryRequest request,
+            Long adminId
     );
 }
