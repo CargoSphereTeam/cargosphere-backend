@@ -64,4 +64,20 @@ public class ShipmentAuditPublisher {
 
         auditClient.publish(event);
     }
+
+    public void publishAdminProcessingStarted(
+            Shipment shipment
+    ) {
+        CurrentActor actor =
+                shipmentActorProvider.getCurrentActor();
+
+        AuditEventRequest event =
+                shipmentAuditEventFactory
+                        .adminProcessingStarted(
+                                shipment,
+                                actor
+                        );
+
+        auditClient.publish(event);
+    }
 }

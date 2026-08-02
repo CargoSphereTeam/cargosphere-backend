@@ -72,6 +72,23 @@ public class ShipmentAuditEventFactory {
         );
     }
 
+    public AuditEventRequest adminProcessingStarted(
+            Shipment shipment,
+            CurrentActor actor
+    ) {
+        return create(
+                shipment,
+                actor,
+                "ADMIN_PROCESSING_STARTED",
+                "Administrative shipment processing started",
+                "POST",
+                "/api/admin/shipments/"
+                        + shipment.getId()
+                        + "/processing/start",
+                200
+        );
+    }
+
     private AuditEventRequest create(
             Shipment shipment,
             CurrentActor actor,
