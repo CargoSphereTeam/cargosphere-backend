@@ -1,6 +1,7 @@
 package com.cargosphere.shipment.service.impl;
 
 import com.cargosphere.shipment.audit.ShipmentAuditPublisher;
+import com.cargosphere.shipment.dto.admin.ProcessingContinueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueItemResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
@@ -111,6 +112,48 @@ public class AdminShipmentProcessingServiceImpl
                 .build();
     }
 
+    @Override
+    public ProcessingContinueResponse continueProcessing(
+            Long shipmentId
+    ) {
+        Shipment shipment = findShipmentById(shipmentId);
+
+        ProcessingStage previousStage =
+                shipment.getProcessingStage();
+
+        ProcessingStage nextStage =
+                determineNextProcessingStage(
+                        shipmentId,
+                        previousStage
+                );
+
+        shipment.setProcessingStage(nextStage);
+
+        Shipment savedShipment =
+                shipmentRepository.save(shipment);
+
+        createProcessingAdvancedEvent(
+                savedShipment,
+                nextStage
+        );
+
+        shipmentAuditPublisher.publishProcessingAdvanced(
+                savedShipment,
+                previousStage
+        );
+
+        return ProcessingContinueResponse.builder()
+                .shipmentId(savedShipment.getId())
+                .shipmentNumber(
+                        savedShipment.getShipmentNumber()
+                )
+                .previousStage(previousStage)
+                .processingStage(nextStage)
+                .advancedAt(
+                        OffsetDateTime.now(ZoneOffset.UTC)
+                )
+                .build();
+    }
     @Override
     @Transactional(readOnly = true)
     public ProcessingQueueResponse getProcessingQueue(
@@ -368,6 +411,183 @@ public class AdminShipmentProcessingServiceImpl
                 );
     }
 
+    private ProcessingStage determineNextProcessingStage(
+            Long shipmentId,
+            ProcessingStage currentStage
+    ) {
+        if (currentStage == null) {
+            throw new InvalidShipmentOperationException(
+                    "Shipment "
+                            + shipmentId
+                            + " has no processing stage"
+            );
+        }
+
+        return switch (currentStage) {
+            case CONTAINER_ALLOCATION ->
+                    continueAfterContainerAllocation(
+                            shipmentId
+                    );
+
+            case DOCUMENT_VERIFICATION ->
+                    continueAfterDocumentVerification(
+                            shipmentId
+                    );
+
+            case PAYMENT_CONFIRMATION ->
+                    continueAfterPaymentConfirmation(
+                            shipmentId
+                    );
+
+            case CARGO_VERIFICATION ->
+                    throw new InvalidShipmentOperationException(
+                            "Cargo verification must be confirmed "
+                                    + "through the cargo verification endpoint"
+                    );
+
+            default ->
+                    throw new InvalidShipmentOperationException(
+                            "Shipment "
+                                    + shipmentId
+                                    + " cannot continue from processing stage "
+                                    + currentStage
+                    );
+        };
+    }
+
+    private ProcessingStage continueAfterContainerAllocation(
+            Long shipmentId
+    ) {
+        List<ContainerAllocationResponse> allocations =
+                containerAllocationClient
+                        .getAllocationsByShipmentId(
+                                shipmentId
+                        );
+
+        if (!isContainerReady(
+                shipmentId,
+                allocations
+        )) {
+            throw new InvalidShipmentOperationException(
+                    "A valid container allocation is required "
+                            + "before continuing shipment "
+                            + shipmentId
+            );
+        }
+
+        return ProcessingStage.CARGO_VERIFICATION;
+    }
+
+    private ProcessingStage continueAfterDocumentVerification(
+            Long shipmentId
+    ) {
+        List<ShipmentDocumentResponse> documents =
+                shipmentDocumentClient
+                        .getDocumentsByShipmentId(
+                                shipmentId
+                        );
+
+        if (!areDocumentsReady(
+                shipmentId,
+                documents
+        )) {
+            throw new InvalidShipmentOperationException(
+                    "All required shipment documents must be verified "
+                            + "before continuing shipment "
+                            + shipmentId
+            );
+        }
+
+        return ProcessingStage.PAYMENT_CONFIRMATION;
+    }
+
+    private ProcessingStage continueAfterPaymentConfirmation(
+            Long shipmentId
+    ) {
+        List<ShipmentPaymentResponse> payments =
+                shipmentPaymentClient
+                        .getPaymentsByShipmentId(
+                                shipmentId
+                        );
+
+        if (!isPaymentReady(
+                shipmentId,
+                payments
+        )) {
+            throw new InvalidShipmentOperationException(
+                    "At least one valid PAID payment is required "
+                            + "before continuing shipment "
+                            + shipmentId
+            );
+        }
+
+        return ProcessingStage.READY_FOR_EBILL;
+    }
+
+    private void createProcessingAdvancedEvent(
+            Shipment shipment,
+            ProcessingStage nextStage
+    ) {
+        ShipmentEventType eventType =
+                switch (nextStage) {
+                    case CARGO_VERIFICATION ->
+                            ShipmentEventType
+                                    .CONTAINER_ALLOCATED;
+
+                    case PAYMENT_CONFIRMATION ->
+                            ShipmentEventType
+                                    .DOCUMENTS_VERIFIED;
+
+                    case READY_FOR_EBILL ->
+                            ShipmentEventType
+                                    .PAYMENT_CONFIRMED;
+
+                    default ->
+                            throw new InvalidShipmentOperationException(
+                                    "Unsupported processing stage transition to "
+                                            + nextStage
+                            );
+                };
+
+        boolean eventAlreadyExists =
+                shipmentEventRepository
+                        .existsByShipment_IdAndEventType(
+                                shipment.getId(),
+                                eventType
+                        );
+
+        if (eventAlreadyExists) {
+            return;
+        }
+
+        String description =
+                switch (eventType) {
+                    case CONTAINER_ALLOCATED ->
+                            "Shipment container allocation confirmed";
+
+                    case DOCUMENTS_VERIFIED ->
+                            "Shipment document verification confirmed";
+
+                    case PAYMENT_CONFIRMED ->
+                            "Shipment payment confirmation completed";
+
+                    default ->
+                            throw new InvalidShipmentOperationException(
+                                    "Unsupported shipment processing event "
+                                            + eventType
+                            );
+                };
+
+        ShipmentEvent event =
+                shipmentEventMapper.toEntity(
+                        shipment,
+                        eventType,
+                        description,
+                        shipment.getOriginLocation()
+                );
+
+        shipmentEventRepository.save(event);
+    }
     private List<String> buildBlockingReasons(
             boolean containerReady,
             boolean cargoReady,

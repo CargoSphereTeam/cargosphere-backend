@@ -2,6 +2,7 @@ package com.cargosphere.shipment.controller;
 
 import com.cargosphere.shipment.dto.admin.CargoVerificationRequest;
 import com.cargosphere.shipment.dto.admin.CargoVerificationResponse;
+import com.cargosphere.shipment.dto.admin.ProcessingContinueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
@@ -119,6 +120,26 @@ public class AdminShipmentProcessingController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/{shipmentId}/processing/continue")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+            summary = "Continue shipment processing",
+            description =
+                    "Validates the current processing stage requirements "
+                            + "and advances the shipment to the next stage"
+    )
+    public ResponseEntity<ProcessingContinueResponse>
+    continueProcessing(
+            @PathVariable
+            @Positive(message = "Shipment ID must be greater than zero")
+            Long shipmentId
+    ) {
+        ProcessingContinueResponse response =
+                adminShipmentProcessingService
+                        .continueProcessing(shipmentId);
+
+        return ResponseEntity.ok(response);
+    }
     @GetMapping("/{shipmentId}/processing/readiness")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(

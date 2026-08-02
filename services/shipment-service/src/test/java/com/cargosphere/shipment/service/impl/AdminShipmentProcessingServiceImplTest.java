@@ -1,6 +1,7 @@
 package com.cargosphere.shipment.service.impl;
 
 import com.cargosphere.shipment.audit.ShipmentAuditPublisher;
+import com.cargosphere.shipment.dto.admin.ProcessingContinueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
@@ -763,6 +764,559 @@ class AdminShipmentProcessingServiceImplTest {
                         "All shipment cargo items must be confirmed",
                         "All required shipment documents must be verified",
                         "At least one valid PAID payment is required"
+                );
+    }
+    @Test
+    void shouldContinueFromContainerAllocationToCargoVerification() {
+        Shipment shipment = createShipment(
+                ProcessingStage.CONTAINER_ALLOCATION
+        );
+
+        ContainerAllocationResponse allocation =
+                new ContainerAllocationResponse(
+                        1L,
+                        10L,
+                        2L,
+                        "DRY_20",
+                        "20 Foot Dry Container",
+                        1,
+                        "ALLOCATED",
+                        null,
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        )
+                );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(containerAllocationClient
+                .getAllocationsByShipmentId(10L))
+                .thenReturn(List.of(allocation));
+
+        when(shipmentRepository.save(shipment))
+                .thenReturn(shipment);
+
+        when(shipmentEventRepository
+                .existsByShipment_IdAndEventType(
+                        10L,
+                        ShipmentEventType.CONTAINER_ALLOCATED
+                ))
+                .thenReturn(false);
+
+        ProcessingContinueResponse response =
+                service.continueProcessing(10L);
+
+        assertThat(response.getShipmentId())
+                .isEqualTo(10L);
+
+        assertThat(response.getPreviousStage())
+                .isEqualTo(
+                        ProcessingStage.CONTAINER_ALLOCATION
+                );
+
+        assertThat(response.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.CARGO_VERIFICATION
+                );
+
+        assertThat(response.getAdvancedAt())
+                .isNotNull();
+
+        assertThat(shipment.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.CARGO_VERIFICATION
+                );
+
+        verify(containerAllocationClient)
+                .getAllocationsByShipmentId(10L);
+
+        verify(shipmentRepository)
+                .save(shipment);
+
+        ArgumentCaptor<ShipmentEvent> eventCaptor =
+                ArgumentCaptor.forClass(
+                        ShipmentEvent.class
+                );
+
+        verify(shipmentEventRepository)
+                .save(eventCaptor.capture());
+
+        ShipmentEvent savedEvent =
+                eventCaptor.getValue();
+
+        assertThat(savedEvent.getEventType())
+                .isEqualTo(
+                        ShipmentEventType.CONTAINER_ALLOCATED
+                );
+
+        assertThat(savedEvent.getShipment())
+                .isSameAs(shipment);
+    }
+    @Test
+    void shouldBlockContinueWhenContainerAllocationIsInvalid() {
+        Shipment shipment = createShipment(
+                ProcessingStage.CONTAINER_ALLOCATION
+        );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(containerAllocationClient
+                .getAllocationsByShipmentId(10L))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() ->
+                service.continueProcessing(10L)
+        )
+                .isInstanceOf(
+                        InvalidShipmentOperationException.class
+                )
+                .hasMessage(
+                        "A valid container allocation is required "
+                                + "before continuing shipment 10"
+                );
+
+        assertThat(shipment.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.CONTAINER_ALLOCATION
+                );
+
+        verify(containerAllocationClient)
+                .getAllocationsByShipmentId(10L);
+
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+
+        verify(shipmentEventRepository, never())
+                .save(any(ShipmentEvent.class));
+    }
+    @Test
+    void shouldContinueFromDocumentVerificationToPaymentConfirmation() {
+        Shipment shipment = createShipment(
+                ProcessingStage.DOCUMENT_VERIFICATION
+        );
+
+        ShipmentDocumentResponse document =
+                new ShipmentDocumentResponse(
+                        1L,
+                        10L,
+                        "COMMERCIAL_INVOICE",
+                        true,
+                        "VERIFIED",
+                        5L,
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                10,
+                                0
+                        ),
+                        "Verified",
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                10,
+                                0
+                        )
+                );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(shipmentDocumentClient
+                .getDocumentsByShipmentId(10L))
+                .thenReturn(List.of(document));
+
+        when(shipmentRepository.save(shipment))
+                .thenReturn(shipment);
+
+        when(shipmentEventRepository
+                .existsByShipment_IdAndEventType(
+                        10L,
+                        ShipmentEventType.DOCUMENTS_VERIFIED
+                ))
+                .thenReturn(false);
+
+        ProcessingContinueResponse response =
+                service.continueProcessing(10L);
+
+        assertThat(response.getPreviousStage())
+                .isEqualTo(
+                        ProcessingStage.DOCUMENT_VERIFICATION
+                );
+
+        assertThat(response.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.PAYMENT_CONFIRMATION
+                );
+
+        assertThat(response.getAdvancedAt())
+                .isNotNull();
+
+        assertThat(shipment.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.PAYMENT_CONFIRMATION
+                );
+
+        verify(shipmentDocumentClient)
+                .getDocumentsByShipmentId(10L);
+
+        verify(shipmentRepository)
+                .save(shipment);
+
+        ArgumentCaptor<ShipmentEvent> eventCaptor =
+                ArgumentCaptor.forClass(
+                        ShipmentEvent.class
+                );
+
+        verify(shipmentEventRepository)
+                .save(eventCaptor.capture());
+
+        assertThat(eventCaptor.getValue().getEventType())
+                .isEqualTo(
+                        ShipmentEventType.DOCUMENTS_VERIFIED
+                );
+
+        assertThat(eventCaptor.getValue().getShipment())
+                .isSameAs(shipment);
+    }
+    @Test
+    void shouldContinueFromPaymentConfirmationToReadyForEbill() {
+        Shipment shipment = createShipment(
+                ProcessingStage.PAYMENT_CONFIRMATION
+        );
+
+        ShipmentPaymentResponse payment =
+                new ShipmentPaymentResponse(
+                        1L,
+                        10L,
+                        100L,
+                        new BigDecimal("12500.00"),
+                        "INR",
+                        "UPI",
+                        "PAID",
+                        "FULL",
+                        "TXN-2026-000123",
+                        LocalDate.of(2026, 8, 15),
+                        LocalDate.of(2026, 8, 2),
+                        "Payment confirmed",
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                10,
+                                0
+                        )
+                );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(shipmentPaymentClient
+                .getPaymentsByShipmentId(10L))
+                .thenReturn(List.of(payment));
+
+        when(shipmentRepository.save(shipment))
+                .thenReturn(shipment);
+
+        when(shipmentEventRepository
+                .existsByShipment_IdAndEventType(
+                        10L,
+                        ShipmentEventType.PAYMENT_CONFIRMED
+                ))
+                .thenReturn(false);
+
+        ProcessingContinueResponse response =
+                service.continueProcessing(10L);
+
+        assertThat(response.getPreviousStage())
+                .isEqualTo(
+                        ProcessingStage.PAYMENT_CONFIRMATION
+                );
+
+        assertThat(response.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.READY_FOR_EBILL
+                );
+
+        assertThat(response.getAdvancedAt())
+                .isNotNull();
+
+        assertThat(shipment.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.READY_FOR_EBILL
+                );
+
+        verify(shipmentPaymentClient)
+                .getPaymentsByShipmentId(10L);
+
+        verify(shipmentRepository)
+                .save(shipment);
+
+        ArgumentCaptor<ShipmentEvent> eventCaptor =
+                ArgumentCaptor.forClass(
+                        ShipmentEvent.class
+                );
+
+        verify(shipmentEventRepository)
+                .save(eventCaptor.capture());
+
+        assertThat(eventCaptor.getValue().getEventType())
+                .isEqualTo(
+                        ShipmentEventType.PAYMENT_CONFIRMED
+                );
+
+        assertThat(eventCaptor.getValue().getShipment())
+                .isSameAs(shipment);
+    }
+    @Test
+    void shouldBlockContinueWhenRequiredDocumentsAreNotVerified() {
+        Shipment shipment = createShipment(
+                ProcessingStage.DOCUMENT_VERIFICATION
+        );
+
+        ShipmentDocumentResponse document =
+                new ShipmentDocumentResponse(
+                        1L,
+                        10L,
+                        "COMMERCIAL_INVOICE",
+                        true,
+                        "PENDING",
+                        null,
+                        null,
+                        null,
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        )
+                );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(shipmentDocumentClient
+                .getDocumentsByShipmentId(10L))
+                .thenReturn(List.of(document));
+
+        assertThatThrownBy(() ->
+                service.continueProcessing(10L)
+        )
+                .isInstanceOf(
+                        InvalidShipmentOperationException.class
+                )
+                .hasMessage(
+                        "All required shipment documents must be verified "
+                                + "before continuing shipment 10"
+                );
+
+        assertThat(shipment.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.DOCUMENT_VERIFICATION
+                );
+
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+
+        verify(shipmentEventRepository, never())
+                .save(any(ShipmentEvent.class));
+    }
+    @Test
+    void shouldBlockContinueWhenValidPaidPaymentDoesNotExist() {
+        Shipment shipment = createShipment(
+                ProcessingStage.PAYMENT_CONFIRMATION
+        );
+
+        ShipmentPaymentResponse payment =
+                new ShipmentPaymentResponse(
+                        1L,
+                        10L,
+                        100L,
+                        new BigDecimal("12500.00"),
+                        "INR",
+                        "UPI",
+                        "PENDING",
+                        "FULL",
+                        null,
+                        LocalDate.of(2026, 8, 15),
+                        null,
+                        "Payment pending",
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        )
+                );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(shipmentPaymentClient
+                .getPaymentsByShipmentId(10L))
+                .thenReturn(List.of(payment));
+
+        assertThatThrownBy(() ->
+                service.continueProcessing(10L)
+        )
+                .isInstanceOf(
+                        InvalidShipmentOperationException.class
+                )
+                .hasMessage(
+                        "At least one valid PAID payment is required "
+                                + "before continuing shipment 10"
+                );
+
+        assertThat(shipment.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.PAYMENT_CONFIRMATION
+                );
+
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+
+        verify(shipmentEventRepository, never())
+                .save(any(ShipmentEvent.class));
+    }
+    @Test
+    void shouldRequireCargoVerificationEndpointAtCargoVerificationStage() {
+        Shipment shipment = createShipment(
+                ProcessingStage.CARGO_VERIFICATION
+        );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        assertThatThrownBy(() ->
+                service.continueProcessing(10L)
+        )
+                .isInstanceOf(
+                        InvalidShipmentOperationException.class
+                )
+                .hasMessage(
+                        "Cargo verification must be confirmed "
+                                + "through the cargo verification endpoint"
+                );
+
+        assertThat(shipment.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.CARGO_VERIFICATION
+                );
+
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+
+        verify(shipmentEventRepository, never())
+                .save(any(ShipmentEvent.class));
+
+        verify(containerAllocationClient, never())
+                .getAllocationsByShipmentId(any());
+
+        verify(shipmentDocumentClient, never())
+                .getDocumentsByShipmentId(any());
+
+        verify(shipmentPaymentClient, never())
+                .getPaymentsByShipmentId(any());
+    }
+    @Test
+    void shouldPublishAuditAfterSuccessfulProcessingTransition() {
+        Shipment shipment = createShipment(
+                ProcessingStage.CONTAINER_ALLOCATION
+        );
+
+        ContainerAllocationResponse allocation =
+                new ContainerAllocationResponse(
+                        1L,
+                        10L,
+                        2L,
+                        "DRY_20",
+                        "20 Foot Dry Container",
+                        1,
+                        "ALLOCATED",
+                        null,
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                2,
+                                9,
+                                0
+                        )
+                );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(containerAllocationClient
+                .getAllocationsByShipmentId(10L))
+                .thenReturn(List.of(allocation));
+
+        when(shipmentRepository.save(shipment))
+                .thenReturn(shipment);
+
+        when(shipmentEventRepository
+                .existsByShipment_IdAndEventType(
+                        10L,
+                        ShipmentEventType.CONTAINER_ALLOCATED
+                ))
+                .thenReturn(true);
+
+        service.continueProcessing(10L);
+
+        verify(shipmentAuditPublisher)
+                .publishProcessingAdvanced(
+                        shipment,
+                        ProcessingStage.CONTAINER_ALLOCATION
                 );
     }
     private Shipment createShipment(

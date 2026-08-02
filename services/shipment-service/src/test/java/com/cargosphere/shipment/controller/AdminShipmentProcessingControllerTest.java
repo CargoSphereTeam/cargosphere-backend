@@ -5,12 +5,14 @@ import com.cargosphere.shipment.dto.admin.CargoVerificationAction;
 import com.cargosphere.shipment.dto.admin.CargoVerificationItemRequest;
 import com.cargosphere.shipment.dto.admin.CargoVerificationRequest;
 import com.cargosphere.shipment.dto.admin.CargoVerificationResponse;
+import com.cargosphere.shipment.dto.admin.ProcessingContinueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueItemResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
+import com.cargosphere.shipment.exception.InvalidShipmentOperationException;
 import com.cargosphere.shipment.service.AdminShipmentProcessingService;
 import com.cargosphere.shipment.service.CargoVerificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -55,6 +57,8 @@ class AdminShipmentProcessingControllerTest {
 
     private static final String PROCESSING_READINESS_ENDPOINT =
             "/api/admin/shipments/10/processing/readiness";
+    private static final String PROCESSING_CONTINUE_ENDPOINT =
+            "/api/admin/shipments/10/processing/continue";
     @Autowired
     private MockMvc mockMvc;
 
@@ -643,6 +647,141 @@ class AdminShipmentProcessingControllerTest {
         verifyNoInteractions(
                 adminShipmentProcessingService
         );
+    }
+    @Test
+    void shouldAllowAdminToContinueProcessing()
+            throws Exception {
+
+        ProcessingContinueResponse response =
+                ProcessingContinueResponse.builder()
+                        .shipmentId(10L)
+                        .shipmentNumber("SHP-2026-00010")
+                        .previousStage(
+                                ProcessingStage.DOCUMENT_VERIFICATION
+                        )
+                        .processingStage(
+                                ProcessingStage.PAYMENT_CONFIRMATION
+                        )
+                        .advancedAt(
+                                OffsetDateTime.of(
+                                        2026,
+                                        8,
+                                        2,
+                                        10,
+                                        30,
+                                        0,
+                                        0,
+                                        ZoneOffset.UTC
+                                )
+                        )
+                        .build();
+
+        when(adminShipmentProcessingService
+                .continueProcessing(10L))
+                .thenReturn(response);
+
+        mockMvc.perform(
+                        post(PROCESSING_CONTINUE_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_ADMIN"
+                                        )
+                                ))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shipmentId").value(10))
+                .andExpect(
+                        jsonPath("$.shipmentNumber")
+                                .value("SHP-2026-00010")
+                )
+                .andExpect(
+                        jsonPath("$.previousStage")
+                                .value("DOCUMENT_VERIFICATION")
+                )
+                .andExpect(
+                        jsonPath("$.processingStage")
+                                .value("PAYMENT_CONFIRMATION")
+                )
+                .andExpect(
+                        jsonPath("$.advancedAt")
+                                .exists()
+                );
+
+        verify(adminShipmentProcessingService)
+                .continueProcessing(10L);
+    }
+    @Test
+    void shouldForbidClientFromContinuingProcessing()
+            throws Exception {
+
+        mockMvc.perform(
+                        post(PROCESSING_CONTINUE_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_CLIENT"
+                                        )
+                                ))
+                )
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(
+                adminShipmentProcessingService
+        );
+    }
+    @Test
+    void shouldRejectAnonymousContinueProcessingRequest()
+            throws Exception {
+
+        mockMvc.perform(
+                        post(PROCESSING_CONTINUE_ENDPOINT)
+                )
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(
+                adminShipmentProcessingService
+        );
+    }
+    @Test
+    void shouldReturnBadRequestWhenProcessingCannotContinue()
+            throws Exception {
+
+        when(adminShipmentProcessingService
+                .continueProcessing(10L))
+                .thenThrow(
+                        new InvalidShipmentOperationException(
+                                "Shipment 10 cannot continue from "
+                                        + "processing stage READY_FOR_EBILL"
+                        )
+                );
+
+        mockMvc.perform(
+                        post(PROCESSING_CONTINUE_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_ADMIN"
+                                        )
+                                ))
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(
+                        jsonPath("$.error")
+                                .value("Bad Request")
+                )
+                .andExpect(
+                        jsonPath("$.message")
+                                .value(
+                                        "Shipment 10 cannot continue from "
+                                                + "processing stage READY_FOR_EBILL"
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.path")
+                                .value(PROCESSING_CONTINUE_ENDPOINT)
+                );
+
+        verify(adminShipmentProcessingService)
+                .continueProcessing(10L);
     }
     private CargoVerificationRequest
     createValidCargoVerificationRequest() {

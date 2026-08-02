@@ -1,6 +1,7 @@
 package com.cargosphere.shipment.audit;
 
 import com.cargosphere.shipment.entity.Shipment;
+import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.entity.enums.ShipmentStatus;
 import org.springframework.stereotype.Component;
 
@@ -89,6 +90,29 @@ public class ShipmentAuditEventFactory {
         );
     }
 
+    public AuditEventRequest processingAdvanced(
+            Shipment shipment,
+            ProcessingStage previousStage,
+            CurrentActor actor
+    ) {
+        String description =
+                "Shipment processing advanced from "
+                        + previousStage
+                        + " to "
+                        + shipment.getProcessingStage();
+
+        return create(
+                shipment,
+                actor,
+                "SHIPMENT_PROCESSING_ADVANCED",
+                description,
+                "POST",
+                "/api/admin/shipments/"
+                        + shipment.getId()
+                        + "/processing/continue",
+                200
+        );
+    }
     private AuditEventRequest create(
             Shipment shipment,
             CurrentActor actor,

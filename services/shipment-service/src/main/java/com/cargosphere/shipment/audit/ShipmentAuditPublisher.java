@@ -1,6 +1,7 @@
 package com.cargosphere.shipment.audit;
 
 import com.cargosphere.shipment.entity.Shipment;
+import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.entity.enums.ShipmentStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -75,6 +76,24 @@ public class ShipmentAuditPublisher {
                 shipmentAuditEventFactory
                         .adminProcessingStarted(
                                 shipment,
+                                actor
+                        );
+
+        auditClient.publish(event);
+    }
+
+    public void publishProcessingAdvanced(
+            Shipment shipment,
+            ProcessingStage previousStage
+    ) {
+        CurrentActor actor =
+                shipmentActorProvider.getCurrentActor();
+
+        AuditEventRequest event =
+                shipmentAuditEventFactory
+                        .processingAdvanced(
+                                shipment,
+                                previousStage,
                                 actor
                         );
 
