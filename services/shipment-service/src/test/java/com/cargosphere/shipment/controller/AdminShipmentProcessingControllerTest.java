@@ -5,6 +5,8 @@ import com.cargosphere.shipment.dto.admin.CargoVerificationAction;
 import com.cargosphere.shipment.dto.admin.CargoVerificationItemRequest;
 import com.cargosphere.shipment.dto.admin.CargoVerificationRequest;
 import com.cargosphere.shipment.dto.admin.CargoVerificationResponse;
+import com.cargosphere.shipment.dto.admin.ProcessingQueueItemResponse;
+import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
@@ -31,6 +33,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -45,6 +48,9 @@ class AdminShipmentProcessingControllerTest {
 
     private static final String START_PROCESSING_ENDPOINT =
             "/api/admin/shipments/10/processing/start";
+
+    private static final String PROCESSING_QUEUE_ENDPOINT =
+            "/api/admin/shipments/processing/queue";
 
     @Autowired
     private MockMvc mockMvc;
@@ -364,6 +370,175 @@ class AdminShipmentProcessingControllerTest {
                         jsonPath("$.currentStage")
                                 .value("CONTAINER_ALLOCATION")
                 );
+    }
+
+    @Test
+    void shouldAllowAdminToGetProcessingQueue()
+            throws Exception {
+
+        ProcessingQueueItemResponse item =
+                ProcessingQueueItemResponse.builder()
+                        .shipmentId(10L)
+                        .shipmentNumber("SHP-2026-00010")
+                        .clientUserId(100L)
+                        .originLocation("Mumbai")
+                        .destinationLocation("Pune")
+                        .processingStage(
+                                ProcessingStage.PENDING_ADMIN_REVIEW
+                        )
+                        .createdAt(
+                                OffsetDateTime.of(
+                                        2026,
+                                        8,
+                                        1,
+                                        8,
+                                        0,
+                                        0,
+                                        0,
+                                        ZoneOffset.UTC
+                                )
+                        )
+                        .build();
+
+        ProcessingQueueResponse response =
+                ProcessingQueueResponse.builder()
+                        .items(List.of(item))
+                        .page(0)
+                        .size(20)
+                        .totalElements(1)
+                        .totalPages(1)
+                        .first(true)
+                        .last(true)
+                        .empty(false)
+                        .build();
+
+        when(adminShipmentProcessingService
+                .getProcessingQueue(
+                        null,
+                        0,
+                        20
+                ))
+                .thenReturn(response);
+
+        mockMvc.perform(
+                        get(PROCESSING_QUEUE_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_ADMIN"
+                                        )
+                                ))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isArray())
+                .andExpect(
+                        jsonPath("$.items[0].shipmentId")
+                                .value(10)
+                )
+                .andExpect(
+                        jsonPath("$.items[0].shipmentNumber")
+                                .value("SHP-2026-00010")
+                )
+                .andExpect(
+                        jsonPath("$.items[0].processingStage")
+                                .value("PENDING_ADMIN_REVIEW")
+                )
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(
+                        jsonPath("$.totalElements")
+                                .value(1)
+                )
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.first").value(true))
+                .andExpect(jsonPath("$.last").value(true))
+                .andExpect(jsonPath("$.empty").value(false));
+
+        verify(adminShipmentProcessingService)
+                .getProcessingQueue(
+                        null,
+                        0,
+                        20
+                );
+    }
+
+    @Test
+    void shouldPassStageAndPaginationToQueueService()
+            throws Exception {
+
+        ProcessingQueueResponse response =
+                ProcessingQueueResponse.builder()
+                        .items(List.of())
+                        .page(2)
+                        .size(10)
+                        .totalElements(0)
+                        .totalPages(0)
+                        .first(false)
+                        .last(true)
+                        .empty(true)
+                        .build();
+
+        when(adminShipmentProcessingService
+                .getProcessingQueue(
+                        ProcessingStage.CARGO_VERIFICATION,
+                        2,
+                        10
+                ))
+                .thenReturn(response);
+
+        mockMvc.perform(
+                        get(PROCESSING_QUEUE_ENDPOINT)
+                                .param(
+                                        "stage",
+                                        "CARGO_VERIFICATION"
+                                )
+                                .param("page", "2")
+                                .param("size", "10")
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_ADMIN"
+                                        )
+                                ))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page").value(2))
+                .andExpect(jsonPath("$.size").value(10))
+                .andExpect(jsonPath("$.empty").value(true));
+
+        verify(adminShipmentProcessingService)
+                .getProcessingQueue(
+                        ProcessingStage.CARGO_VERIFICATION,
+                        2,
+                        10
+                );
+    }
+
+    @Test
+    void shouldForbidClientFromProcessingQueue()
+            throws Exception {
+
+        mockMvc.perform(
+                        get(PROCESSING_QUEUE_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_CLIENT"
+                                        )
+                                ))
+                )
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(adminShipmentProcessingService);
+    }
+
+    @Test
+    void shouldRejectAnonymousProcessingQueueRequest()
+            throws Exception {
+
+        mockMvc.perform(
+                        get(PROCESSING_QUEUE_ENDPOINT)
+                )
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(adminShipmentProcessingService);
     }
 
     private CargoVerificationRequest
