@@ -1,6 +1,7 @@
 package com.cargosphere.shipment.mapper;
 
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
+import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
 import com.cargosphere.shipment.dto.ebill.snapshot.EbillClientSnapshot;
 import com.cargosphere.shipment.dto.ebill.snapshot.EbillConfirmedCargoSnapshot;
 import com.cargosphere.shipment.dto.ebill.snapshot.EbillContainerAllocationSnapshot;
@@ -30,6 +31,48 @@ import java.util.Objects;
 public class EbillSnapshotMapper {
 
     private static final String SCHEMA_VERSION = "1.0";
+
+    public EbillPreviewResponse toPreview(
+            Shipment shipment,
+            AuthUserResponse client,
+            List<CargoDetail> originalCargo,
+            List<CargoVerification> confirmedCargo,
+            List<ContainerAllocationResponse> allocations,
+            List<ShipmentDocumentResponse> documents,
+            List<ShipmentPaymentResponse> payments,
+            List<ShipmentEvent> shipmentEvents,
+            ProcessingReadinessResponse readiness
+    ) {
+        return EbillPreviewResponse.builder()
+                .shipment(
+                        toShipmentSnapshot(shipment)
+                )
+                .client(
+                        toClientSnapshot(client)
+                )
+                .originalCargo(
+                        toOriginalCargoSnapshots(originalCargo)
+                )
+                .confirmedCargo(
+                        toConfirmedCargoSnapshots(confirmedCargo)
+                )
+                .containerAllocations(
+                        toAllocationSnapshots(allocations)
+                )
+                .documents(
+                        toDocumentSnapshots(documents)
+                )
+                .payments(
+                        toPaymentSnapshots(payments)
+                )
+                .shipmentEvents(
+                        toEventSnapshots(shipmentEvents)
+                )
+                .readiness(
+                        toReadinessSnapshot(readiness)
+                )
+                .build();
+    }
 
     public EbillSnapshot toSnapshot(
             String ebillNumber,

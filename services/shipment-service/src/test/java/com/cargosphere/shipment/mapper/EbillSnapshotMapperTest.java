@@ -1,6 +1,7 @@
 package com.cargosphere.shipment.mapper;
 
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
+import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
 import com.cargosphere.shipment.dto.ebill.snapshot.EbillSnapshot;
 import com.cargosphere.shipment.entity.CargoDetail;
 import com.cargosphere.shipment.entity.CargoVerification;
@@ -331,5 +332,30 @@ class EbillSnapshotMapperTest {
 
         assertThat(snapshot.readiness().blockingReasons())
                 .isEmpty();
+        EbillPreviewResponse preview =
+                mapper.toPreview(
+                        shipment,
+                        client,
+                        List.of(cargoDetail),
+                        List.of(verification),
+                        List.of(allocation),
+                        List.of(document),
+                        List.of(payment),
+                        List.of(laterEvent, earlierEvent),
+                        readiness
+                );
+
+        assertThat(preview.getShipment().shipmentId())
+                .isEqualTo(10L);
+
+        assertThat(preview.getClient().userId())
+                .isEqualTo(100L);
+
+        assertThat(preview.getShipmentEvents())
+                .extracting(event -> event.eventId())
+                .containsExactly(71L, 72L);
+
+        assertThat(preview.getReadiness().ebillReady())
+                .isTrue();
     }
 }
