@@ -10,6 +10,10 @@ import com.cargosphere.shipment.dto.admin.ProcessingQueueItemResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
+import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
+import com.cargosphere.shipment.dto.ebill.snapshot.EbillClientSnapshot;
+import com.cargosphere.shipment.dto.ebill.snapshot.EbillReadinessSnapshot;
+import com.cargosphere.shipment.dto.ebill.snapshot.EbillShipmentSnapshot;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
 import com.cargosphere.shipment.exception.InvalidShipmentOperationException;
@@ -57,6 +61,9 @@ class AdminShipmentProcessingControllerTest {
 
     private static final String PROCESSING_READINESS_ENDPOINT =
             "/api/admin/shipments/10/processing/readiness";
+
+    private static final String EBILL_PREVIEW_ENDPOINT =
+            "/api/admin/shipments/10/ebill-preview";
     private static final String PROCESSING_CONTINUE_ENDPOINT =
             "/api/admin/shipments/10/processing/continue";
     @Autowired
@@ -648,6 +655,132 @@ class AdminShipmentProcessingControllerTest {
                 adminShipmentProcessingService
         );
     }
+    @Test
+    void shouldAllowAdminToGetEbillPreview()
+            throws Exception {
+        EbillPreviewResponse response =
+                EbillPreviewResponse.builder()
+                        .shipment(
+                                new EbillShipmentSnapshot(
+                                        10L,
+                                        "SHP-2026-00010",
+                                        100L,
+                                        "Mumbai",
+                                        "Pune",
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        ProcessingStage.READY_FOR_EBILL,
+                                        null,
+                                        null,
+                                        null
+                                )
+                        )
+                        .client(
+                                new EbillClientSnapshot(
+                                        100L,
+                                        "Cargo Client",
+                                        "client@cargosphere.com",
+                                        "9876543210",
+                                        "ROLE_CLIENT",
+                                        "ACTIVE",
+                                        null,
+                                        null
+                                )
+                        )
+                        .originalCargo(List.of())
+                        .confirmedCargo(List.of())
+                        .containerAllocations(List.of())
+                        .documents(List.of())
+                        .payments(List.of())
+                        .shipmentEvents(List.of())
+                        .readiness(
+                                new EbillReadinessSnapshot(
+                                        ProcessingStage.READY_FOR_EBILL,
+                                        true,
+                                        true,
+                                        true,
+                                        true,
+                                        true,
+                                        List.of()
+                                )
+                        )
+                        .build();
+
+        when(adminShipmentProcessingService
+                .getEbillPreview(10L))
+                .thenReturn(response);
+
+        mockMvc.perform(
+                        get(EBILL_PREVIEW_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_ADMIN"
+                                        )
+                                ))
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.shipment.shipmentId")
+                                .value(10)
+                )
+                .andExpect(
+                        jsonPath("$.shipment.shipmentNumber")
+                                .value("SHP-2026-00010")
+                )
+                .andExpect(
+                        jsonPath("$.client.userId")
+                                .value(100)
+                )
+                .andExpect(
+                        jsonPath("$.client.fullName")
+                                .value("Cargo Client")
+                )
+                .andExpect(
+                        jsonPath("$.originalCargo")
+                                .isEmpty()
+                )
+                .andExpect(
+                        jsonPath("$.readiness.ebillReady")
+                                .value(true)
+                );
+
+        verify(adminShipmentProcessingService)
+                .getEbillPreview(10L);
+    }
+
+    @Test
+    void shouldForbidClientFromEbillPreview()
+            throws Exception {
+        mockMvc.perform(
+                        get(EBILL_PREVIEW_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_CLIENT"
+                                        )
+                                ))
+                )
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(
+                adminShipmentProcessingService
+        );
+    }
+
+    @Test
+    void shouldRejectAnonymousEbillPreviewRequest()
+            throws Exception {
+        mockMvc.perform(
+                        get(EBILL_PREVIEW_ENDPOINT)
+                )
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(
+                adminShipmentProcessingService
+        );
+    }
+
     @Test
     void shouldAllowAdminToContinueProcessing()
             throws Exception {

@@ -6,6 +6,7 @@ import com.cargosphere.shipment.dto.admin.ProcessingContinueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
+import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.service.AdminShipmentProcessingService;
 import com.cargosphere.shipment.service.CargoVerificationService;
@@ -160,6 +161,28 @@ public class AdminShipmentProcessingController {
 
         return ResponseEntity.ok(response);
     }
+    @GetMapping("/{shipmentId}/ebill-preview")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+            summary = "Preview shipment eBill",
+            description =
+                    "Returns live shipment, client, cargo, container, "
+                            + "document, payment, event and readiness data "
+                            + "before immutable eBill generation"
+    )
+    public ResponseEntity<EbillPreviewResponse>
+    getEbillPreview(
+            @PathVariable
+            @Positive(message = "Shipment ID must be greater than zero")
+            Long shipmentId
+    ) {
+        EbillPreviewResponse response =
+                adminShipmentProcessingService
+                        .getEbillPreview(shipmentId);
+
+        return ResponseEntity.ok(response);
+    }
+
     @PutMapping("/{shipmentId}/cargo-verification")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(

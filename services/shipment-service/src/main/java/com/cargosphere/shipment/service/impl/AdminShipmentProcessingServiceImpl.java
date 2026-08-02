@@ -6,6 +6,7 @@ import com.cargosphere.shipment.dto.admin.ProcessingQueueItemResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
+import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
 import com.cargosphere.shipment.entity.CargoDetail;
 import com.cargosphere.shipment.entity.CargoVerification;
 import com.cargosphere.shipment.entity.Shipment;
@@ -16,12 +17,15 @@ import com.cargosphere.shipment.entity.enums.ShipmentEventType;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
 import com.cargosphere.shipment.exception.InvalidShipmentOperationException;
 import com.cargosphere.shipment.exception.ResourceNotFoundException;
+import com.cargosphere.shipment.integration.auth.AuthUserClient;
+import com.cargosphere.shipment.integration.auth.AuthUserResponse;
 import com.cargosphere.shipment.integration.container.ContainerAllocationClient;
 import com.cargosphere.shipment.integration.container.ContainerAllocationResponse;
 import com.cargosphere.shipment.integration.document.ShipmentDocumentClient;
 import com.cargosphere.shipment.integration.document.ShipmentDocumentResponse;
 import com.cargosphere.shipment.integration.payment.ShipmentPaymentClient;
 import com.cargosphere.shipment.integration.payment.ShipmentPaymentResponse;
+import com.cargosphere.shipment.mapper.EbillSnapshotMapper;
 import com.cargosphere.shipment.mapper.ShipmentEventMapper;
 import com.cargosphere.shipment.repository.CargoDetailRepository;
 import com.cargosphere.shipment.repository.CargoVerificationRepository;
@@ -65,6 +69,10 @@ public class AdminShipmentProcessingServiceImpl
 
     private final CargoVerificationRepository
             cargoVerificationRepository;
+
+    private final AuthUserClient authUserClient;
+
+    private final EbillSnapshotMapper ebillSnapshotMapper;
 
     private final ContainerAllocationClient
             containerAllocationClient;
@@ -243,6 +251,69 @@ public class AdminShipmentProcessingServiceImpl
                 cargoVerifications,
                 documents,
                 payments
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EbillPreviewResponse getEbillPreview(
+            Long shipmentId
+    ) {
+        Shipment shipment = findShipmentById(shipmentId);
+
+        AuthUserResponse client =
+                authUserClient.getUserById(
+                        shipment.getClientUserId()
+                );
+
+        List<ContainerAllocationResponse> allocations =
+                containerAllocationClient
+                        .getAllocationsByShipmentId(shipmentId);
+
+        List<CargoDetail> cargoDetails =
+                cargoDetailRepository
+                        .findByShipment_Id(shipmentId);
+
+        List<CargoVerification> cargoVerifications =
+                cargoVerificationRepository
+                        .findByCargoDetail_Shipment_IdOrderByCargoDetail_IdAsc(
+                                shipmentId
+                        );
+
+        List<ShipmentDocumentResponse> documents =
+                shipmentDocumentClient
+                        .getDocumentsByShipmentId(shipmentId);
+
+        List<ShipmentPaymentResponse> payments =
+                shipmentPaymentClient
+                        .getPaymentsByShipmentId(shipmentId);
+
+        List<ShipmentEvent> shipmentEvents =
+                shipmentEventRepository
+                        .findByShipment_IdOrderByEventTimeDesc(
+                                shipmentId
+                        );
+
+        ProcessingReadinessResponse readiness =
+                processingReadinessEvaluator.evaluate(
+                        shipment,
+                        allocations,
+                        cargoDetails,
+                        cargoVerifications,
+                        documents,
+                        payments
+                );
+
+        return ebillSnapshotMapper.toPreview(
+                shipment,
+                client,
+                cargoDetails,
+                cargoVerifications,
+                allocations,
+                documents,
+                payments,
+                shipmentEvents,
+                readiness
         );
     }
 
