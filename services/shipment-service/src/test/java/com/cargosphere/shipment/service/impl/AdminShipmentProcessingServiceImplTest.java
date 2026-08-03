@@ -2,6 +2,7 @@ package com.cargosphere.shipment.service.impl;
 
 import com.cargosphere.shipment.service.support.EbillNumberGenerator;
 import com.cargosphere.shipment.service.support.EbillSnapshotJsonService;
+import com.cargosphere.shipment.service.support.EbillPdfGenerator;
 import com.cargosphere.shipment.service.support.ProcessingReadinessEvaluator;
 
 import com.cargosphere.shipment.audit.CurrentActor;
@@ -12,6 +13,7 @@ import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.dto.ebill.EbillGenerationResponse;
+import com.cargosphere.shipment.dto.ebill.EbillPdfDocument;
 import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
 import com.cargosphere.shipment.dto.ebill.snapshot.EbillSnapshot;
 import com.cargosphere.shipment.entity.CargoDetail;
@@ -105,6 +107,9 @@ class AdminShipmentProcessingServiceImplTest {
     private EbillSnapshotJsonService ebillSnapshotJsonService;
 
     @Mock
+    private EbillPdfGenerator ebillPdfGenerator;
+
+    @Mock
     private ContainerAllocationClient
             containerAllocationClient;
 
@@ -132,6 +137,7 @@ class AdminShipmentProcessingServiceImplTest {
                 new EbillSnapshotMapper(),
                 ebillNumberGenerator,
                 ebillSnapshotJsonService,
+                ebillPdfGenerator,
                 containerAllocationClient,
                 shipmentDocumentClient,
                 shipmentPaymentClient,
@@ -1504,6 +1510,216 @@ class AdminShipmentProcessingServiceImplTest {
 
         verify(shipmentEventRepository, never())
                 .save(any(ShipmentEvent.class));
+    }
+
+    @Test
+    void shouldGenerateEbillPdfFromStoredImmutableSnapshot() {
+        OffsetDateTime generatedAt =
+                OffsetDateTime.of(
+                        2026,
+                        8,
+                        3,
+                        10,
+                        0,
+                        0,
+                        0,
+                        ZoneOffset.UTC
+                );
+
+        Shipment shipment = createShipment(
+                ProcessingStage.EBILL_GENERATED
+        );
+
+        shipment.setEbillNumber(
+                "EBL-20260803-A1B2C3D4"
+        );
+        shipment.setEbillVersion(1);
+        shipment.setEbillGeneratedAt(generatedAt);
+        shipment.setEbillGeneratedBy(5L);
+        shipment.setEbillSnapshot(
+                "{\"schemaVersion\":\"1.0\"}"
+        );
+        shipment.setProcessingCompletedAt(generatedAt);
+
+        EbillSnapshot snapshot =
+                new EbillSnapshot(
+                        "1.0",
+                        "EBL-20260803-A1B2C3D4",
+                        1,
+                        generatedAt,
+                        5L,
+                        null,
+                        null,
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        null
+                );
+
+        byte[] pdfContent =
+                new byte[] {
+                        37,
+                        80,
+                        68,
+                        70,
+                        45
+                };
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(ebillSnapshotJsonService.deserialize(
+                "{\"schemaVersion\":\"1.0\"}"
+        )).thenReturn(snapshot);
+
+        when(ebillPdfGenerator.generate(snapshot))
+                .thenReturn(pdfContent);
+
+        EbillPdfDocument document =
+                service.getEbillPdf(10L);
+
+        assertThat(document.fileName())
+                .isEqualTo(
+                        "EBL-20260803-A1B2C3D4.pdf"
+                );
+
+        assertThat(document.content())
+                .isEqualTo(pdfContent);
+
+        assertThat(document.content())
+                .isNotSameAs(pdfContent);
+
+        verify(ebillSnapshotJsonService)
+                .deserialize(
+                        "{\"schemaVersion\":\"1.0\"}"
+                );
+
+        verify(ebillPdfGenerator)
+                .generate(snapshot);
+
+        verifyNoInteractions(
+                shipmentActorProvider,
+                authUserClient,
+                containerAllocationClient,
+                cargoDetailRepository,
+                cargoVerificationRepository,
+                shipmentDocumentClient,
+                shipmentPaymentClient,
+                ebillNumberGenerator,
+                shipmentEventRepository,
+                shipmentAuditPublisher
+        );
+
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+    }
+
+    @Test
+    void shouldRejectEbillPdfWhenEbillHasNotBeenGenerated() {
+        Shipment shipment = createShipment(
+                ProcessingStage.READY_FOR_EBILL
+        );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        assertThatThrownBy(() ->
+                service.getEbillPdf(10L)
+        )
+                .isInstanceOf(
+                        InvalidShipmentOperationException.class
+                )
+                .hasMessage(
+                        "Shipment 10 does not have a generated eBill"
+                );
+
+        verifyNoInteractions(
+                ebillSnapshotJsonService,
+                ebillPdfGenerator
+        );
+
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+    }
+
+    @Test
+    void shouldRejectEbillPdfWhenStoredSnapshotMetadataDoesNotMatch() {
+        OffsetDateTime generatedAt =
+                OffsetDateTime.of(
+                        2026,
+                        8,
+                        3,
+                        10,
+                        0,
+                        0,
+                        0,
+                        ZoneOffset.UTC
+                );
+
+        Shipment shipment = createShipment(
+                ProcessingStage.EBILL_GENERATED
+        );
+
+        shipment.setEbillNumber(
+                "EBL-20260803-A1B2C3D4"
+        );
+        shipment.setEbillVersion(1);
+        shipment.setEbillGeneratedAt(generatedAt);
+        shipment.setEbillGeneratedBy(5L);
+        shipment.setEbillSnapshot(
+                "{\"schemaVersion\":\"1.0\"}"
+        );
+
+        EbillSnapshot mismatchedSnapshot =
+                new EbillSnapshot(
+                        "1.0",
+                        "EBL-20260803-DIFFERENT",
+                        1,
+                        generatedAt,
+                        5L,
+                        null,
+                        null,
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        null
+                );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(ebillSnapshotJsonService.deserialize(
+                "{\"schemaVersion\":\"1.0\"}"
+        )).thenReturn(mismatchedSnapshot);
+
+        assertThatThrownBy(() ->
+                service.getEbillPdf(10L)
+        )
+                .isInstanceOf(
+                        InvalidShipmentOperationException.class
+                )
+                .hasMessage(
+                        "Stored eBill snapshot does not match "
+                                + "shipment metadata for shipment 10"
+                );
+
+        verify(ebillSnapshotJsonService)
+                .deserialize(
+                        "{\"schemaVersion\":\"1.0\"}"
+                );
+
+        verifyNoInteractions(
+                ebillPdfGenerator
+        );
+
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
     }
 
     @Test

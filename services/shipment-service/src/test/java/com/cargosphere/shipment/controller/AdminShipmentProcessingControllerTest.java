@@ -11,6 +11,7 @@ import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.dto.ebill.EbillGenerationResponse;
+import com.cargosphere.shipment.dto.ebill.EbillPdfDocument;
 import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
 import com.cargosphere.shipment.dto.ebill.snapshot.EbillClientSnapshot;
 import com.cargosphere.shipment.dto.ebill.snapshot.EbillReadinessSnapshot;
@@ -44,6 +45,8 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -68,6 +71,9 @@ class AdminShipmentProcessingControllerTest {
 
     private static final String EBILL_GENERATION_ENDPOINT =
             "/api/admin/shipments/10/ebill";
+
+    private static final String EBILL_PDF_ENDPOINT =
+            "/api/admin/shipments/10/ebill/pdf";
     private static final String PROCESSING_CONTINUE_ENDPOINT =
             "/api/admin/shipments/10/processing/continue";
     @Autowired
@@ -758,6 +764,89 @@ class AdminShipmentProcessingControllerTest {
             throws Exception {
         mockMvc.perform(
                         post(EBILL_GENERATION_ENDPOINT)
+                )
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(
+                adminShipmentProcessingService
+        );
+    }
+
+    @Test
+    void shouldAllowAdminToDownloadEbillPdf()
+            throws Exception {
+        byte[] pdfContent =
+                new byte[] {
+                        37,
+                        80,
+                        68,
+                        70,
+                        45
+                };
+
+        EbillPdfDocument document =
+                new EbillPdfDocument(
+                        "EBL-20260803-A1B2C3D4.pdf",
+                        pdfContent
+                );
+
+        when(adminShipmentProcessingService
+                .getEbillPdf(10L))
+                .thenReturn(document);
+
+        mockMvc.perform(
+                        get(EBILL_PDF_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_ADMIN"
+                                        )
+                                ))
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        content().contentType(
+                                "application/pdf"
+                        )
+                )
+                .andExpect(
+                        header().string(
+                                "Content-Disposition",
+                                "attachment; filename=\""
+                                        + "EBL-20260803-A1B2C3D4.pdf"
+                                        + "\""
+                        )
+                )
+                .andExpect(
+                        content().bytes(pdfContent)
+                );
+
+        verify(adminShipmentProcessingService)
+                .getEbillPdf(10L);
+    }
+
+    @Test
+    void shouldForbidClientFromDownloadingEbillPdf()
+            throws Exception {
+        mockMvc.perform(
+                        get(EBILL_PDF_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_CLIENT"
+                                        )
+                                ))
+                )
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(
+                adminShipmentProcessingService
+        );
+    }
+
+    @Test
+    void shouldRejectAnonymousEbillPdfRequest()
+            throws Exception {
+        mockMvc.perform(
+                        get(EBILL_PDF_ENDPOINT)
                 )
                 .andExpect(status().isUnauthorized());
 

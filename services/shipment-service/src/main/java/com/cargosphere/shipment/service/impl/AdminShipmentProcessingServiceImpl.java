@@ -9,6 +9,7 @@ import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.dto.ebill.EbillGenerationResponse;
+import com.cargosphere.shipment.dto.ebill.EbillPdfDocument;
 import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
 import com.cargosphere.shipment.dto.ebill.snapshot.EbillSnapshot;
 import com.cargosphere.shipment.entity.CargoDetail;
@@ -37,6 +38,7 @@ import com.cargosphere.shipment.repository.ShipmentEventRepository;
 import com.cargosphere.shipment.repository.ShipmentRepository;
 import com.cargosphere.shipment.service.AdminShipmentProcessingService;
 import com.cargosphere.shipment.service.support.EbillNumberGenerator;
+import com.cargosphere.shipment.service.support.EbillPdfGenerator;
 import com.cargosphere.shipment.service.support.EbillSnapshotJsonService;
 import com.cargosphere.shipment.service.support.ProcessingReadinessEvaluator;
 import lombok.RequiredArgsConstructor;
@@ -90,6 +92,8 @@ public class AdminShipmentProcessingServiceImpl
 
     private final EbillSnapshotJsonService
             ebillSnapshotJsonService;
+
+    private final EbillPdfGenerator ebillPdfGenerator;
 
     private final ContainerAllocationClient
             containerAllocationClient;
@@ -449,6 +453,64 @@ public class AdminShipmentProcessingServiceImpl
                 .publishEbillGenerated(savedShipment);
 
         return toEbillGenerationResponse(savedShipment);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EbillPdfDocument getEbillPdf(
+            Long shipmentId
+    ) {
+        Shipment shipment = findShipmentById(shipmentId);
+
+        String ebillNumber =
+                shipment.getEbillNumber();
+
+        String snapshotJson =
+                shipment.getEbillSnapshot();
+
+        if (
+                ebillNumber == null
+                        || ebillNumber.isBlank()
+                        || snapshotJson == null
+                        || snapshotJson.isBlank()
+        ) {
+            throw new InvalidShipmentOperationException(
+                    "Shipment "
+                            + shipmentId
+                            + " does not have a generated eBill"
+            );
+        }
+
+        EbillSnapshot snapshot =
+                ebillSnapshotJsonService.deserialize(
+                        snapshotJson
+                );
+
+        if (
+                snapshot == null
+                        || !Objects.equals(
+                        ebillNumber,
+                        snapshot.ebillNumber()
+                )
+                        || !Objects.equals(
+                        shipment.getEbillVersion(),
+                        snapshot.ebillVersion()
+                )
+        ) {
+            throw new InvalidShipmentOperationException(
+                    "Stored eBill snapshot does not match "
+                            + "shipment metadata for shipment "
+                            + shipmentId
+            );
+        }
+
+        byte[] pdfContent =
+                ebillPdfGenerator.generate(snapshot);
+
+        return new EbillPdfDocument(
+                ebillNumber + ".pdf",
+                pdfContent
+        );
     }
 
     private boolean isContainerReady(

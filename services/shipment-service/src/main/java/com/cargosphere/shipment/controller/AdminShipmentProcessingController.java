@@ -7,6 +7,7 @@ import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.dto.ebill.EbillGenerationResponse;
+import com.cargosphere.shipment.dto.ebill.EbillPdfDocument;
 import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.service.AdminShipmentProcessingService;
@@ -19,7 +20,9 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -185,6 +188,38 @@ public class AdminShipmentProcessingController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(response);
+    }
+
+    @GetMapping(
+            value = "/{shipmentId}/ebill/pdf",
+            produces = MediaType.APPLICATION_PDF_VALUE
+    )
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+            summary = "Download shipment eBill PDF",
+            description =
+                    "Generates a downloadable PDF from the stored "
+                            + "immutable eBill snapshot"
+    )
+    public ResponseEntity<byte[]> getEbillPdf(
+            @PathVariable
+            @Positive(message = "Shipment ID must be greater than zero")
+            Long shipmentId
+    ) {
+        EbillPdfDocument document =
+                adminShipmentProcessingService
+                        .getEbillPdf(shipmentId);
+
+        return ResponseEntity
+                .ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\""
+                                + document.fileName()
+                                + "\""
+                )
+                .body(document.content());
     }
 
     @GetMapping("/{shipmentId}/ebill-preview")

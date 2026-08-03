@@ -5,6 +5,7 @@ import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
 import com.cargosphere.shipment.dto.ebill.EbillGenerationResponse;
+import com.cargosphere.shipment.dto.ebill.EbillPdfDocument;
 import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 
@@ -31,6 +32,10 @@ public interface AdminShipmentProcessingService {
     );
 
     EbillGenerationResponse generateEbill(
+            Long shipmentId
+    );
+
+    EbillPdfDocument getEbillPdf(
             Long shipmentId
     );
 }
