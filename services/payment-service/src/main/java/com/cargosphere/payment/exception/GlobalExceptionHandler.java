@@ -31,7 +31,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({
             DuplicateTransactionReferenceException.class,
-            InvalidPaymentStateException.class
+            InvalidPaymentStateException.class,
+            PaymentAlreadyConfirmedException.class
     })
     public ResponseEntity<ErrorResponse> handleConflict(
             RuntimeException exception
@@ -43,6 +44,19 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler({
+            InvalidPaymentAmountException.class,
+            PaymentConfirmationNotAllowedException.class
+    })
+    public ResponseEntity<ErrorResponse> handleBusinessValidation(
+            RuntimeException exception
+    ) {
+        return buildResponse(
+                HttpStatus.BAD_REQUEST,
+                exception.getMessage(),
+                null
+        );
+    }
     @ExceptionHandler(InvalidJwtClaimException.class)
     public ResponseEntity<ErrorResponse> handleInvalidJwtClaim(
             InvalidJwtClaimException exception

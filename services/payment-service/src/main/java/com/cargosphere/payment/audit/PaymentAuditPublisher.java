@@ -1,5 +1,6 @@
 package com.cargosphere.payment.audit;
 
+import com.cargosphere.payment.entity.ShipmentPaymentSummary;
 import com.cargosphere.payment.entity.Payment;
 import com.cargosphere.payment.entity.enums.PaymentStatus;
 import lombok.RequiredArgsConstructor;
@@ -103,6 +104,28 @@ public class PaymentAuditPublisher {
             logFailure(
                     "PAYMENT_REFUNDED",
                     payment,
+                    exception
+            );
+        }
+    }
+
+    public void publishShipmentPaymentConfirmed(
+            ShipmentPaymentSummary summary
+    ) {
+
+        try {
+
+            log.info(
+                    "Shipment payment summary confirmed: shipmentId={}, confirmedBy={}",
+                    summary.getShipmentId(),
+                    summary.getConfirmedBy()
+            );
+
+        } catch (Exception exception) {
+
+            log.warn(
+                    "Shipment payment confirmation audit failed: shipmentId={}",
+                    summary.getShipmentId(),
                     exception
             );
         }

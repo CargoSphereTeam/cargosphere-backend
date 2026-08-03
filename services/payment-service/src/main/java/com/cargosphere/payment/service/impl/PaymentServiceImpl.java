@@ -1,5 +1,15 @@
 package com.cargosphere.payment.service.impl;
 
+
+import com.cargosphere.payment.exception.PaymentAlreadyConfirmedException;
+import java.time.LocalDateTime;
+import com.cargosphere.payment.exception.PaymentConfirmationNotAllowedException;
+import com.cargosphere.payment.exception.InvalidPaymentAmountException;
+import com.cargosphere.payment.dto.ShipmentPaymentSummaryRequest;
+import com.cargosphere.payment.dto.ShipmentPaymentSummaryResponse;
+import com.cargosphere.payment.entity.ShipmentPaymentSummary;
+import com.cargosphere.payment.mapper.ShipmentPaymentSummaryMapper;
+import com.cargosphere.payment.repository.ShipmentPaymentSummaryRepository;
 import com.cargosphere.payment.dto.CreatePaymentRequest;
 import com.cargosphere.payment.dto.PaymentResponse;
 import com.cargosphere.payment.dto.RefundPaymentRequest;
@@ -18,6 +28,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.cargosphere.payment.audit.PaymentAuditPublisher;
+import com.cargosphere.payment.entity.enums.ConfirmationStatus;
+import java.math.BigDecimal;
+import com.cargosphere.payment.entity.enums.PaymentSummaryAction;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -36,6 +49,13 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final PaymentMapper paymentMapper;
+
+    private final ShipmentPaymentSummaryRepository
+            shipmentPaymentSummaryRepository;
+
+    private final ShipmentPaymentSummaryMapper
+            shipmentPaymentSummaryMapper;
+
 private final PaymentAuditPublisher
         paymentAuditPublisher;
 
@@ -212,6 +232,169 @@ public PaymentResponse refundPayment(
     );
 }
 
+    @Override
+    @Transactional(readOnly = true)
+    public ShipmentPaymentSummaryResponse getShipmentPaymentSummary(
+            Long shipmentId
+    ) {
+
+        ShipmentPaymentSummary summary =
+                 shipmentPaymentSummaryRepository
+                        .findByShipmentId(shipmentId)
+                        .orElseThrow(() ->
+                                new PaymentNotFoundException(
+                                        "Payment summary not found for shipment ID: "
+                                                + shipmentId
+                                )
+                        );
+
+        return shipmentPaymentSummaryMapper.toResponse(
+                summary
+        );
+    }
+
+    @Override
+    public ShipmentPaymentSummaryResponse saveShipmentPaymentSummary(
+            Long shipmentId,
+            ShipmentPaymentSummaryRequest request,
+            Long adminId
+    ) {
+
+        ShipmentPaymentSummary summary =
+                shipmentPaymentSummaryRepository
+                        .findByShipmentId(shipmentId)
+                        .orElseGet(ShipmentPaymentSummary::new);
+
+        if (summary.getId() == null) {
+
+            summary.setShipmentId(
+                    shipmentId
+            );
+
+            summary.setConfirmationStatus(
+                    ConfirmationStatus.DRAFT
+            );
+        }
+
+        summary.setEstimatedAmount(
+                request.getEstimatedAmount()
+        );
+
+        summary.setBaseAmount(
+                request.getBaseAmount()
+        );
+
+        summary.setCharges(
+                request.getCharges()
+        );
+
+        summary.setTaxes(
+                request.getTaxes()
+        );
+
+        summary.setDiscount(
+                request.getDiscount()
+        );
+
+        summary.setPaidAmount(
+                request.getPaidAmount()
+        );
+
+        if (request.getCurrency() != null) {
+            summary.setCurrency(request.getCurrency());
+        }
+
+        if (request.getPaymentMethod() != null) {
+            summary.setPaymentMethod(request.getPaymentMethod());
+        }
+
+        summary.setRemarks(
+                request.getRemarks()
+        );
+
+        BigDecimal finalAmount =
+                calculateFinalAmount(request);
+
+        BigDecimal balanceAmount =
+                calculateBalanceAmount(
+                        finalAmount,
+                        request
+                );
+
+        validateAmounts(
+                request,
+                finalAmount,
+                balanceAmount
+        );
+
+        summary.setFinalAmount(
+                finalAmount
+        );
+
+        summary.setBalanceAmount(
+                balanceAmount
+        );
+        if (request.getAction() == PaymentSummaryAction.SAVE_DRAFT) {
+
+            ShipmentPaymentSummary savedSummary =
+                    handleSaveDraft(summary);
+
+            return shipmentPaymentSummaryMapper.toResponse(
+                    savedSummary
+            );
+        }
+        if (isAlreadyConfirmed(summary)) {
+
+            if (summary.getConfirmedBy() != null
+                    && Objects.equals(
+                    summary.getConfirmedBy(),
+                    adminId
+            )
+                    && summary.getFinalAmount().compareTo(finalAmount) == 0
+                    && summary.getPaidAmount().compareTo(
+                    request.getPaidAmount()
+            ) == 0) {
+
+                return shipmentPaymentSummaryMapper.toResponse(
+                        summary
+                );
+            }
+
+            throw new PaymentAlreadyConfirmedException(
+                    "Payment summary has already been confirmed."
+            );
+        }
+
+        validateConfirmationAllowed(
+                balanceAmount
+        );
+
+        summary.setConfirmationStatus(
+                ConfirmationStatus.CONFIRMED
+        );
+
+        summary.setConfirmedBy(
+                adminId
+        );
+
+        summary.setConfirmedAt(
+                LocalDateTime.now()
+        );
+
+        ShipmentPaymentSummary confirmedSummary =
+                shipmentPaymentSummaryRepository.save(
+                        summary
+                );
+
+        paymentAuditPublisher.publishShipmentPaymentConfirmed(
+                confirmedSummary
+        );
+
+        return shipmentPaymentSummaryMapper.toResponse(
+                confirmedSummary
+        );
+    }
+
     private Payment findPaymentById(Long paymentId) {
         return paymentRepository.findById(paymentId)
                 .orElseThrow(() ->
@@ -375,4 +558,84 @@ public PaymentResponse refundPayment(
 
         return value.trim();
     }
+
+    private BigDecimal calculateFinalAmount(
+            ShipmentPaymentSummaryRequest request
+    ) {
+        return request.getBaseAmount()
+                .add(request.getCharges())
+                .add(request.getTaxes())
+                .subtract(request.getDiscount());
+    }
+
+    private BigDecimal calculateBalanceAmount(
+            BigDecimal finalAmount,
+            ShipmentPaymentSummaryRequest request
+    ) {
+        return finalAmount.subtract(
+                request.getPaidAmount()
+        );
+    }
+
+    private void validateAmounts(
+            ShipmentPaymentSummaryRequest request,
+            BigDecimal finalAmount,
+            BigDecimal balanceAmount
+    ) {
+
+        if (finalAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new InvalidPaymentAmountException(
+                    "Final amount cannot be negative."
+            );
+        }
+
+        if (request.getPaidAmount().compareTo(finalAmount) > 0) {
+            throw new InvalidPaymentAmountException(
+                    "Paid amount cannot exceed final amount."
+            );
+        }
+
+        if (balanceAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new InvalidPaymentAmountException(
+                    "Balance amount cannot be negative."
+            );
+        }
+    }
+
+    private ShipmentPaymentSummary handleSaveDraft(
+            ShipmentPaymentSummary summary
+    ) {
+
+        summary.setConfirmationStatus(
+                ConfirmationStatus.DRAFT
+        );
+
+        summary.setConfirmedBy(null);
+
+        summary.setConfirmedAt(null);
+
+        return shipmentPaymentSummaryRepository.save(
+                summary
+        );
+    }
+
+    private boolean isAlreadyConfirmed(
+            ShipmentPaymentSummary summary
+    ) {
+        return summary.getConfirmationStatus()
+                == ConfirmationStatus.CONFIRMED;
+    }
+
+    private void validateConfirmationAllowed(
+            BigDecimal balanceAmount
+    ) {
+
+        if (balanceAmount.compareTo(BigDecimal.ZERO) != 0) {
+            throw new PaymentConfirmationNotAllowedException(
+                    "Payment cannot be confirmed until the balance amount is zero."
+            );
+        }
+    }
+
+
 }
