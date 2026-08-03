@@ -6,6 +6,7 @@ import com.cargosphere.shipment.dto.admin.ProcessingContinueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
+import com.cargosphere.shipment.dto.ebill.EbillGenerationResponse;
 import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.service.AdminShipmentProcessingService;
@@ -18,6 +19,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -161,6 +163,30 @@ public class AdminShipmentProcessingController {
 
         return ResponseEntity.ok(response);
     }
+    @PostMapping("/{shipmentId}/ebill")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+            summary = "Generate shipment eBill",
+            description =
+                    "Validates all shipment-processing requirements, "
+                            + "creates an immutable eBill snapshot and "
+                            + "stores the generated eBill metadata"
+    )
+    public ResponseEntity<EbillGenerationResponse>
+    generateEbill(
+            @PathVariable
+            @Positive(message = "Shipment ID must be greater than zero")
+            Long shipmentId
+    ) {
+        EbillGenerationResponse response =
+                adminShipmentProcessingService
+                        .generateEbill(shipmentId);
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(response);
+    }
+
     @GetMapping("/{shipmentId}/ebill-preview")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(

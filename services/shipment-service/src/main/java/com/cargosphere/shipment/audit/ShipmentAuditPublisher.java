@@ -82,6 +82,22 @@ public class ShipmentAuditPublisher {
         auditClient.publish(event);
     }
 
+    public void publishEbillGenerated(
+            Shipment shipment
+    ) {
+        CurrentActor actor =
+                shipmentActorProvider.getCurrentActor();
+
+        AuditEventRequest event =
+                shipmentAuditEventFactory
+                        .ebillGenerated(
+                                shipment,
+                                actor
+                        );
+
+        auditClient.publish(event);
+    }
+
     public void publishProcessingAdvanced(
             Shipment shipment,
             ProcessingStage previousStage

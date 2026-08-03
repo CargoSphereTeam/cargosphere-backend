@@ -1,12 +1,16 @@
 package com.cargosphere.shipment.service.impl;
 
+import com.cargosphere.shipment.audit.CurrentActor;
+import com.cargosphere.shipment.audit.ShipmentActorProvider;
 import com.cargosphere.shipment.audit.ShipmentAuditPublisher;
 import com.cargosphere.shipment.dto.admin.ProcessingContinueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueItemResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
+import com.cargosphere.shipment.dto.ebill.EbillGenerationResponse;
 import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
+import com.cargosphere.shipment.dto.ebill.snapshot.EbillSnapshot;
 import com.cargosphere.shipment.entity.CargoDetail;
 import com.cargosphere.shipment.entity.CargoVerification;
 import com.cargosphere.shipment.entity.Shipment;
@@ -32,6 +36,8 @@ import com.cargosphere.shipment.repository.CargoVerificationRepository;
 import com.cargosphere.shipment.repository.ShipmentEventRepository;
 import com.cargosphere.shipment.repository.ShipmentRepository;
 import com.cargosphere.shipment.service.AdminShipmentProcessingService;
+import com.cargosphere.shipment.service.support.EbillNumberGenerator;
+import com.cargosphere.shipment.service.support.EbillSnapshotJsonService;
 import com.cargosphere.shipment.service.support.ProcessingReadinessEvaluator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -57,6 +63,10 @@ public class AdminShipmentProcessingServiceImpl
 
     private static final int MAX_PAGE_SIZE = 100;
 
+    private static final int EBILL_VERSION = 1;
+
+    private static final int MAX_EBILL_NUMBER_ATTEMPTS = 10;
+
     private final ShipmentRepository shipmentRepository;
 
     private final ShipmentEventRepository shipmentEventRepository;
@@ -64,6 +74,8 @@ public class AdminShipmentProcessingServiceImpl
     private final ShipmentEventMapper shipmentEventMapper;
 
     private final ShipmentAuditPublisher shipmentAuditPublisher;
+
+    private final ShipmentActorProvider shipmentActorProvider;
 
     private final CargoDetailRepository cargoDetailRepository;
 
@@ -73,6 +85,11 @@ public class AdminShipmentProcessingServiceImpl
     private final AuthUserClient authUserClient;
 
     private final EbillSnapshotMapper ebillSnapshotMapper;
+
+    private final EbillNumberGenerator ebillNumberGenerator;
+
+    private final EbillSnapshotJsonService
+            ebillSnapshotJsonService;
 
     private final ContainerAllocationClient
             containerAllocationClient;
@@ -315,6 +332,123 @@ public class AdminShipmentProcessingServiceImpl
                 shipmentEvents,
                 readiness
         );
+    }
+
+    @Override
+    public EbillGenerationResponse generateEbill(
+            Long shipmentId
+    ) {
+        Shipment shipment = findShipmentById(shipmentId);
+
+        if (shipment.getEbillNumber() != null) {
+            return toEbillGenerationResponse(shipment);
+        }
+
+        validateEbillGenerationStage(shipment);
+
+        CurrentActor actor =
+                shipmentActorProvider.getCurrentActor();
+
+        if (actor == null || actor.userId() == null) {
+            throw new InvalidShipmentOperationException(
+                    "An authenticated administrator is required "
+                            + "to generate an eBill"
+            );
+        }
+
+        AuthUserResponse client =
+                authUserClient.getUserById(
+                        shipment.getClientUserId()
+                );
+
+        List<ContainerAllocationResponse> allocations =
+                containerAllocationClient
+                        .getAllocationsByShipmentId(shipmentId);
+
+        List<CargoDetail> cargoDetails =
+                cargoDetailRepository
+                        .findByShipment_Id(shipmentId);
+
+        List<CargoVerification> cargoVerifications =
+                cargoVerificationRepository
+                        .findByCargoDetail_Shipment_IdOrderByCargoDetail_IdAsc(
+                                shipmentId
+                        );
+
+        List<ShipmentDocumentResponse> documents =
+                shipmentDocumentClient
+                        .getDocumentsByShipmentId(shipmentId);
+
+        List<ShipmentPaymentResponse> payments =
+                shipmentPaymentClient
+                        .getPaymentsByShipmentId(shipmentId);
+
+        List<ShipmentEvent> shipmentEvents =
+                shipmentEventRepository
+                        .findByShipment_IdOrderByEventTimeDesc(
+                                shipmentId
+                        );
+
+        ProcessingReadinessResponse readiness =
+                processingReadinessEvaluator.evaluate(
+                        shipment,
+                        allocations,
+                        cargoDetails,
+                        cargoVerifications,
+                        documents,
+                        payments
+                );
+
+        validateEbillReadiness(
+                shipmentId,
+                readiness
+        );
+
+        OffsetDateTime generatedAt =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        String ebillNumber =
+                generateUniqueEbillNumber(generatedAt);
+
+        EbillSnapshot snapshot =
+                ebillSnapshotMapper.toSnapshot(
+                        ebillNumber,
+                        EBILL_VERSION,
+                        generatedAt,
+                        actor.userId(),
+                        shipment,
+                        client,
+                        cargoDetails,
+                        cargoVerifications,
+                        allocations,
+                        documents,
+                        payments,
+                        shipmentEvents,
+                        readiness
+                );
+
+        String snapshotJson =
+                ebillSnapshotJsonService.serialize(snapshot);
+
+        shipment.setEbillNumber(ebillNumber);
+        shipment.setEbillVersion(EBILL_VERSION);
+        shipment.setEbillGeneratedAt(generatedAt);
+        shipment.setEbillGeneratedBy(actor.userId());
+        shipment.setEbillSnapshot(snapshotJson);
+        shipment.setProcessingCompletedAt(generatedAt);
+        shipment.setProcessingStage(
+                ProcessingStage.EBILL_GENERATED
+        );
+
+        Shipment savedShipment =
+                shipmentRepository.save(shipment);
+
+        createEbillGeneratedEvent(savedShipment);
+
+        shipmentAuditPublisher
+                .publishEbillGenerated(savedShipment);
+
+        return toEbillGenerationResponse(savedShipment);
     }
 
     private boolean isContainerReady(
@@ -652,6 +786,120 @@ public class AdminShipmentProcessingServiceImpl
         }
 
         return List.copyOf(reasons);
+    }
+
+    private void validateEbillGenerationStage(
+            Shipment shipment
+    ) {
+        if (shipment.getProcessingStage()
+                != ProcessingStage.READY_FOR_EBILL) {
+
+            throw new InvalidProcessingStageException(
+                    shipment.getId(),
+                    ProcessingStage.READY_FOR_EBILL,
+                    shipment.getProcessingStage()
+            );
+        }
+    }
+
+    private void validateEbillReadiness(
+            Long shipmentId,
+            ProcessingReadinessResponse readiness
+    ) {
+        if (readiness.isEbillReady()) {
+            return;
+        }
+
+        String reasons =
+                String.join(
+                        "; ",
+                        readiness.getBlockingReasons()
+                );
+
+        throw new InvalidShipmentOperationException(
+                "Shipment "
+                        + shipmentId
+                        + " is not ready for eBill generation: "
+                        + reasons
+        );
+    }
+
+    private String generateUniqueEbillNumber(
+            OffsetDateTime generatedAt
+    ) {
+        for (
+                int attempt = 0;
+                attempt < MAX_EBILL_NUMBER_ATTEMPTS;
+                attempt++
+        ) {
+            String candidate =
+                    ebillNumberGenerator.generate(
+                            generatedAt
+                    );
+
+            if (!shipmentRepository
+                    .existsByEbillNumber(candidate)) {
+                return candidate;
+            }
+        }
+
+        throw new InvalidShipmentOperationException(
+                "Unable to generate a unique eBill number"
+        );
+    }
+
+    private void createEbillGeneratedEvent(
+            Shipment shipment
+    ) {
+        boolean eventAlreadyExists =
+                shipmentEventRepository
+                        .existsByShipment_IdAndEventType(
+                                shipment.getId(),
+                                ShipmentEventType.EBILL_GENERATED
+                        );
+
+        if (eventAlreadyExists) {
+            return;
+        }
+
+        ShipmentEvent event =
+                shipmentEventMapper.toEntity(
+                        shipment,
+                        ShipmentEventType.EBILL_GENERATED,
+                        "Shipment eBill generated successfully "
+                                + "with number "
+                                + shipment.getEbillNumber(),
+                        shipment.getOriginLocation()
+                );
+
+        shipmentEventRepository.save(event);
+    }
+
+    private EbillGenerationResponse
+    toEbillGenerationResponse(
+            Shipment shipment
+    ) {
+        return EbillGenerationResponse.builder()
+                .shipmentId(shipment.getId())
+                .shipmentNumber(
+                        shipment.getShipmentNumber()
+                )
+                .ebillNumber(
+                        shipment.getEbillNumber()
+                )
+                .ebillVersion(
+                        shipment.getEbillVersion()
+                )
+                .generatedAt(
+                        shipment.getEbillGeneratedAt()
+                )
+                .generatedBy(
+                        shipment.getEbillGeneratedBy()
+                )
+                .processingStage(
+                        shipment.getProcessingStage()
+                )
+                .build();
     }
 
     private Shipment findShipmentById(Long shipmentId) {

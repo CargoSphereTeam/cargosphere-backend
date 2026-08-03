@@ -10,6 +10,7 @@ import com.cargosphere.shipment.dto.admin.ProcessingQueueItemResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
+import com.cargosphere.shipment.dto.ebill.EbillGenerationResponse;
 import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
 import com.cargosphere.shipment.dto.ebill.snapshot.EbillClientSnapshot;
 import com.cargosphere.shipment.dto.ebill.snapshot.EbillReadinessSnapshot;
@@ -64,6 +65,9 @@ class AdminShipmentProcessingControllerTest {
 
     private static final String EBILL_PREVIEW_ENDPOINT =
             "/api/admin/shipments/10/ebill-preview";
+
+    private static final String EBILL_GENERATION_ENDPOINT =
+            "/api/admin/shipments/10/ebill";
     private static final String PROCESSING_CONTINUE_ENDPOINT =
             "/api/admin/shipments/10/processing/continue";
     @Autowired
@@ -655,6 +659,113 @@ class AdminShipmentProcessingControllerTest {
                 adminShipmentProcessingService
         );
     }
+    @Test
+    void shouldAllowAdminToGenerateEbill()
+            throws Exception {
+        OffsetDateTime generatedAt =
+                OffsetDateTime.of(
+                        2026,
+                        8,
+                        3,
+                        10,
+                        0,
+                        0,
+                        0,
+                        ZoneOffset.UTC
+                );
+
+        EbillGenerationResponse response =
+                EbillGenerationResponse.builder()
+                        .shipmentId(10L)
+                        .shipmentNumber(
+                                "SHP-2026-00010"
+                        )
+                        .ebillNumber(
+                                "EBL-20260803-A1B2C3D4"
+                        )
+                        .ebillVersion(1)
+                        .generatedAt(generatedAt)
+                        .generatedBy(5L)
+                        .processingStage(
+                                ProcessingStage.EBILL_GENERATED
+                        )
+                        .build();
+
+        when(adminShipmentProcessingService
+                .generateEbill(10L))
+                .thenReturn(response);
+
+        mockMvc.perform(
+                        post(EBILL_GENERATION_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_ADMIN"
+                                        )
+                                ))
+                )
+                .andExpect(status().isCreated())
+                .andExpect(
+                        jsonPath("$.shipmentId")
+                                .value(10)
+                )
+                .andExpect(
+                        jsonPath("$.shipmentNumber")
+                                .value("SHP-2026-00010")
+                )
+                .andExpect(
+                        jsonPath("$.ebillNumber")
+                                .value(
+                                        "EBL-20260803-A1B2C3D4"
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.ebillVersion")
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath("$.generatedBy")
+                                .value(5)
+                )
+                .andExpect(
+                        jsonPath("$.processingStage")
+                                .value("EBILL_GENERATED")
+                );
+
+        verify(adminShipmentProcessingService)
+                .generateEbill(10L);
+    }
+
+    @Test
+    void shouldForbidClientFromGeneratingEbill()
+            throws Exception {
+        mockMvc.perform(
+                        post(EBILL_GENERATION_ENDPOINT)
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority(
+                                                "ROLE_CLIENT"
+                                        )
+                                ))
+                )
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(
+                adminShipmentProcessingService
+        );
+    }
+
+    @Test
+    void shouldRejectAnonymousEbillGenerationRequest()
+            throws Exception {
+        mockMvc.perform(
+                        post(EBILL_GENERATION_ENDPOINT)
+                )
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(
+                adminShipmentProcessingService
+        );
+    }
+
     @Test
     void shouldAllowAdminToGetEbillPreview()
             throws Exception {

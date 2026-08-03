@@ -1,13 +1,19 @@
 package com.cargosphere.shipment.service.impl;
 
+import com.cargosphere.shipment.service.support.EbillNumberGenerator;
+import com.cargosphere.shipment.service.support.EbillSnapshotJsonService;
 import com.cargosphere.shipment.service.support.ProcessingReadinessEvaluator;
 
+import com.cargosphere.shipment.audit.CurrentActor;
+import com.cargosphere.shipment.audit.ShipmentActorProvider;
 import com.cargosphere.shipment.audit.ShipmentAuditPublisher;
 import com.cargosphere.shipment.dto.admin.ProcessingContinueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingQueueResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingReadinessResponse;
 import com.cargosphere.shipment.dto.admin.ProcessingStartResponse;
+import com.cargosphere.shipment.dto.ebill.EbillGenerationResponse;
 import com.cargosphere.shipment.dto.ebill.EbillPreviewResponse;
+import com.cargosphere.shipment.dto.ebill.snapshot.EbillSnapshot;
 import com.cargosphere.shipment.entity.CargoDetail;
 import com.cargosphere.shipment.entity.CargoVerification;
 import com.cargosphere.shipment.entity.Shipment;
@@ -64,6 +70,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -79,6 +86,9 @@ class AdminShipmentProcessingServiceImplTest {
     private ShipmentAuditPublisher shipmentAuditPublisher;
 
     @Mock
+    private ShipmentActorProvider shipmentActorProvider;
+
+    @Mock
     private CargoDetailRepository cargoDetailRepository;
 
     @Mock
@@ -87,6 +97,12 @@ class AdminShipmentProcessingServiceImplTest {
 
     @Mock
     private AuthUserClient authUserClient;
+
+    @Mock
+    private EbillNumberGenerator ebillNumberGenerator;
+
+    @Mock
+    private EbillSnapshotJsonService ebillSnapshotJsonService;
 
     @Mock
     private ContainerAllocationClient
@@ -109,10 +125,13 @@ class AdminShipmentProcessingServiceImplTest {
                 shipmentEventRepository,
                 new ShipmentEventMapper(),
                 shipmentAuditPublisher,
+                shipmentActorProvider,
                 cargoDetailRepository,
                 cargoVerificationRepository,
                 authUserClient,
                 new EbillSnapshotMapper(),
+                ebillNumberGenerator,
+                ebillSnapshotJsonService,
                 containerAllocationClient,
                 shipmentDocumentClient,
                 shipmentPaymentClient,
@@ -938,6 +957,553 @@ class AdminShipmentProcessingServiceImplTest {
 
         assertThat(response.getReadiness().ebillReady())
                 .isTrue();
+    }
+
+    @Test
+    void shouldGenerateImmutableEbillSuccessfully() {
+        Shipment shipment = createShipment(
+                ProcessingStage.READY_FOR_EBILL
+        );
+
+        CargoDetail cargoDetail = CargoDetail.builder()
+                .id(20L)
+                .shipment(shipment)
+                .cargoName("Electronics")
+                .build();
+
+        CargoVerification verification =
+                CargoVerification.builder()
+                        .id(30L)
+                        .cargoDetail(cargoDetail)
+                        .verificationStatus(
+                                CargoVerificationStatus.CONFIRMED
+                        )
+                        .verifiedBy(5L)
+                        .verifiedAt(
+                                LocalDateTime.of(
+                                        2026,
+                                        8,
+                                        3,
+                                        9,
+                                        0
+                                )
+                        )
+                        .build();
+
+        AuthUserResponse client =
+                new AuthUserResponse(
+                        100L,
+                        "Cargo Client",
+                        "client@cargosphere.com",
+                        "9876543210",
+                        "ROLE_CLIENT",
+                        "ACTIVE",
+                        LocalDateTime.of(
+                                2026,
+                                7,
+                                1,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                3,
+                                9,
+                                0
+                        )
+                );
+
+        ContainerAllocationResponse allocation =
+                new ContainerAllocationResponse(
+                        1L,
+                        10L,
+                        2L,
+                        "DRY_20",
+                        "20 Foot Dry Container",
+                        1,
+                        "ALLOCATED",
+                        null,
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                3,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                3,
+                                9,
+                                0
+                        )
+                );
+
+        ShipmentDocumentResponse document =
+                new ShipmentDocumentResponse(
+                        1L,
+                        10L,
+                        "COMMERCIAL_INVOICE",
+                        true,
+                        "VERIFIED",
+                        5L,
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                3,
+                                9,
+                                30
+                        ),
+                        "Verified",
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                3,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                3,
+                                9,
+                                30
+                        )
+                );
+
+        ShipmentPaymentResponse payment =
+                new ShipmentPaymentResponse(
+                        1L,
+                        10L,
+                        100L,
+                        new BigDecimal("12500.00"),
+                        "INR",
+                        "UPI",
+                        "PAID",
+                        "FULL",
+                        "TXN-2026-000123",
+                        LocalDate.of(2026, 8, 15),
+                        LocalDate.of(2026, 8, 3),
+                        "Payment confirmed",
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                3,
+                                9,
+                                0
+                        ),
+                        LocalDateTime.of(
+                                2026,
+                                8,
+                                3,
+                                10,
+                                0
+                        )
+                );
+
+        CurrentActor actor =
+                new CurrentActor(
+                        5L,
+                        "ROLE_ADMIN"
+                );
+
+        String ebillNumber =
+                "EBL-20260803-A1B2C3D4";
+
+        String snapshotJson =
+                "{\"schemaVersion\":\"1.0\"}";
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(shipmentActorProvider.getCurrentActor())
+                .thenReturn(actor);
+
+        when(authUserClient.getUserById(100L))
+                .thenReturn(client);
+
+        when(containerAllocationClient
+                .getAllocationsByShipmentId(10L))
+                .thenReturn(List.of(allocation));
+
+        when(cargoDetailRepository
+                .findByShipment_Id(10L))
+                .thenReturn(List.of(cargoDetail));
+
+        when(cargoVerificationRepository
+                .findByCargoDetail_Shipment_IdOrderByCargoDetail_IdAsc(
+                        10L
+                ))
+                .thenReturn(List.of(verification));
+
+        when(shipmentDocumentClient
+                .getDocumentsByShipmentId(10L))
+                .thenReturn(List.of(document));
+
+        when(shipmentPaymentClient
+                .getPaymentsByShipmentId(10L))
+                .thenReturn(List.of(payment));
+
+        when(shipmentEventRepository
+                .findByShipment_IdOrderByEventTimeDesc(10L))
+                .thenReturn(List.of());
+
+        when(ebillNumberGenerator.generate(
+                any(OffsetDateTime.class)
+        ))
+                .thenReturn(ebillNumber);
+
+        when(shipmentRepository
+                .existsByEbillNumber(ebillNumber))
+                .thenReturn(false);
+
+        when(ebillSnapshotJsonService.serialize(
+                any(EbillSnapshot.class)
+        ))
+                .thenReturn(snapshotJson);
+
+        when(shipmentRepository.save(shipment))
+                .thenReturn(shipment);
+
+        when(shipmentEventRepository
+                .existsByShipment_IdAndEventType(
+                        10L,
+                        ShipmentEventType.EBILL_GENERATED
+                ))
+                .thenReturn(false);
+
+        EbillGenerationResponse response =
+                service.generateEbill(10L);
+
+        assertThat(response.getShipmentId())
+                .isEqualTo(10L);
+
+        assertThat(response.getShipmentNumber())
+                .isEqualTo("SHP-2026-00010");
+
+        assertThat(response.getEbillNumber())
+                .isEqualTo(ebillNumber);
+
+        assertThat(response.getEbillVersion())
+                .isEqualTo(1);
+
+        assertThat(response.getGeneratedBy())
+                .isEqualTo(5L);
+
+        assertThat(response.getGeneratedAt())
+                .isNotNull();
+
+        assertThat(response.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.EBILL_GENERATED
+                );
+
+        assertThat(shipment.getEbillNumber())
+                .isEqualTo(ebillNumber);
+
+        assertThat(shipment.getEbillVersion())
+                .isEqualTo(1);
+
+        assertThat(shipment.getEbillGeneratedBy())
+                .isEqualTo(5L);
+
+        assertThat(shipment.getEbillGeneratedAt())
+                .isNotNull();
+
+        assertThat(shipment.getEbillSnapshot())
+                .isEqualTo(snapshotJson);
+
+        assertThat(shipment.getProcessingCompletedAt())
+                .isEqualTo(
+                        shipment.getEbillGeneratedAt()
+                );
+
+        assertThat(shipment.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.EBILL_GENERATED
+                );
+
+        ArgumentCaptor<EbillSnapshot> snapshotCaptor =
+                ArgumentCaptor.forClass(
+                        EbillSnapshot.class
+                );
+
+        verify(ebillSnapshotJsonService)
+                .serialize(snapshotCaptor.capture());
+
+        EbillSnapshot capturedSnapshot =
+                snapshotCaptor.getValue();
+
+        assertThat(capturedSnapshot.ebillNumber())
+                .isEqualTo(ebillNumber);
+
+        assertThat(capturedSnapshot.ebillVersion())
+                .isEqualTo(1);
+
+        assertThat(capturedSnapshot.generatedBy())
+                .isEqualTo(5L);
+
+        assertThat(capturedSnapshot.generatedAt())
+                .isEqualTo(
+                        shipment.getEbillGeneratedAt()
+                );
+
+        assertThat(capturedSnapshot.readiness().ebillReady())
+                .isTrue();
+
+        verify(shipmentRepository)
+                .save(shipment);
+
+        ArgumentCaptor<ShipmentEvent> eventCaptor =
+                ArgumentCaptor.forClass(
+                        ShipmentEvent.class
+                );
+
+        verify(shipmentEventRepository)
+                .save(eventCaptor.capture());
+
+        ShipmentEvent generatedEvent =
+                eventCaptor.getValue();
+
+        assertThat(generatedEvent.getEventType())
+                .isEqualTo(
+                        ShipmentEventType.EBILL_GENERATED
+                );
+
+        assertThat(generatedEvent.getEventDescription())
+                .contains(ebillNumber);
+
+        verify(shipmentAuditPublisher)
+                .publishEbillGenerated(shipment);
+    }
+
+    @Test
+    void shouldReturnExistingEbillWithoutRegenerating() {
+        OffsetDateTime generatedAt =
+                OffsetDateTime.of(
+                        2026,
+                        8,
+                        3,
+                        10,
+                        0,
+                        0,
+                        0,
+                        ZoneOffset.UTC
+                );
+
+        Shipment shipment = createShipment(
+                ProcessingStage.EBILL_GENERATED
+        );
+
+        shipment.setEbillNumber(
+                "EBL-20260803-A1B2C3D4"
+        );
+
+        shipment.setEbillVersion(1);
+        shipment.setEbillGeneratedAt(generatedAt);
+        shipment.setEbillGeneratedBy(5L);
+        shipment.setEbillSnapshot(
+                "{\"schemaVersion\":\"1.0\"}"
+        );
+        shipment.setProcessingCompletedAt(generatedAt);
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        EbillGenerationResponse response =
+                service.generateEbill(10L);
+
+        assertThat(response.getShipmentId())
+                .isEqualTo(10L);
+
+        assertThat(response.getShipmentNumber())
+                .isEqualTo("SHP-2026-00010");
+
+        assertThat(response.getEbillNumber())
+                .isEqualTo(
+                        "EBL-20260803-A1B2C3D4"
+                );
+
+        assertThat(response.getEbillVersion())
+                .isEqualTo(1);
+
+        assertThat(response.getGeneratedAt())
+                .isEqualTo(generatedAt);
+
+        assertThat(response.getGeneratedBy())
+                .isEqualTo(5L);
+
+        assertThat(response.getProcessingStage())
+                .isEqualTo(
+                        ProcessingStage.EBILL_GENERATED
+                );
+
+        verifyNoInteractions(
+                shipmentActorProvider,
+                authUserClient,
+                containerAllocationClient,
+                cargoDetailRepository,
+                cargoVerificationRepository,
+                shipmentDocumentClient,
+                shipmentPaymentClient,
+                ebillNumberGenerator,
+                ebillSnapshotJsonService,
+                shipmentEventRepository,
+                shipmentAuditPublisher
+        );
+
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+    }
+
+    @Test
+    void shouldRejectEbillGenerationBeforeReadyStage() {
+        Shipment shipment = createShipment(
+                ProcessingStage.CONTAINER_ALLOCATION
+        );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        assertThatThrownBy(() ->
+                service.generateEbill(10L)
+        )
+                .isInstanceOf(
+                        InvalidProcessingStageException.class
+                )
+                .hasMessage(
+                        "Shipment 10 must be in processing stage "
+                                + "READY_FOR_EBILL, but current stage is "
+                                + "CONTAINER_ALLOCATION"
+                );
+
+        verifyNoInteractions(
+                shipmentActorProvider,
+                authUserClient,
+                containerAllocationClient,
+                cargoDetailRepository,
+                cargoVerificationRepository,
+                shipmentDocumentClient,
+                shipmentPaymentClient,
+                ebillNumberGenerator,
+                ebillSnapshotJsonService,
+                shipmentEventRepository,
+                shipmentAuditPublisher
+        );
+
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+    }
+
+    @Test
+    void shouldRejectEbillGenerationWithoutAuthenticatedAdmin() {
+        Shipment shipment = createShipment(
+                ProcessingStage.READY_FOR_EBILL
+        );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(shipmentActorProvider.getCurrentActor())
+                .thenReturn(CurrentActor.anonymous());
+
+        assertThatThrownBy(() ->
+                service.generateEbill(10L)
+        )
+                .isInstanceOf(
+                        InvalidShipmentOperationException.class
+                )
+                .hasMessage(
+                        "An authenticated administrator is required "
+                                + "to generate an eBill"
+                );
+
+        verifyNoInteractions(
+                authUserClient,
+                containerAllocationClient,
+                cargoDetailRepository,
+                cargoVerificationRepository,
+                shipmentDocumentClient,
+                shipmentPaymentClient,
+                ebillNumberGenerator,
+                ebillSnapshotJsonService,
+                shipmentEventRepository,
+                shipmentAuditPublisher
+        );
+
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+    }
+
+    @Test
+    void shouldRejectEbillGenerationWhenReadinessIsBlocked() {
+        Shipment shipment = createShipment(
+                ProcessingStage.READY_FOR_EBILL
+        );
+
+        when(shipmentRepository.findById(10L))
+                .thenReturn(Optional.of(shipment));
+
+        when(shipmentActorProvider.getCurrentActor())
+                .thenReturn(
+                        new CurrentActor(
+                                5L,
+                                "ROLE_ADMIN"
+                        )
+                );
+
+        when(containerAllocationClient
+                .getAllocationsByShipmentId(10L))
+                .thenReturn(List.of());
+
+        when(cargoDetailRepository
+                .findByShipment_Id(10L))
+                .thenReturn(List.of());
+
+        when(cargoVerificationRepository
+                .findByCargoDetail_Shipment_IdOrderByCargoDetail_IdAsc(
+                        10L
+                ))
+                .thenReturn(List.of());
+
+        when(shipmentDocumentClient
+                .getDocumentsByShipmentId(10L))
+                .thenReturn(List.of());
+
+        when(shipmentPaymentClient
+                .getPaymentsByShipmentId(10L))
+                .thenReturn(List.of());
+
+        when(shipmentEventRepository
+                .findByShipment_IdOrderByEventTimeDesc(10L))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() ->
+                service.generateEbill(10L)
+        )
+                .isInstanceOf(
+                        InvalidShipmentOperationException.class
+                )
+                .hasMessage(
+                        "Shipment 10 is not ready for eBill generation: "
+                                + "No valid container allocation exists; "
+                                + "All shipment cargo items must be confirmed; "
+                                + "All required shipment documents must be verified; "
+                                + "At least one valid PAID payment is required"
+                );
+
+        verifyNoInteractions(
+                ebillNumberGenerator,
+                ebillSnapshotJsonService,
+                shipmentAuditPublisher
+        );
+
+        verify(shipmentRepository, never())
+                .save(any(Shipment.class));
+
+        verify(shipmentEventRepository, never())
+                .save(any(ShipmentEvent.class));
     }
 
     @Test

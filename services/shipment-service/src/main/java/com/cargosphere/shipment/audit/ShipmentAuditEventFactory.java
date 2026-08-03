@@ -113,6 +113,27 @@ public class ShipmentAuditEventFactory {
                 200
         );
     }
+    public AuditEventRequest ebillGenerated(
+            Shipment shipment,
+            CurrentActor actor
+    ) {
+        String description =
+                "Shipment eBill generated successfully with number "
+                        + shipment.getEbillNumber();
+
+        return create(
+                shipment,
+                actor,
+                "EBILL_GENERATED",
+                description,
+                "POST",
+                "/api/admin/shipments/"
+                        + shipment.getId()
+                        + "/ebill",
+                201
+        );
+    }
+
     private AuditEventRequest create(
             Shipment shipment,
             CurrentActor actor,
