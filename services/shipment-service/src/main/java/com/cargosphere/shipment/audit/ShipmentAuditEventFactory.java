@@ -1,6 +1,7 @@
 package com.cargosphere.shipment.audit;
 
 import com.cargosphere.shipment.entity.Shipment;
+import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.entity.enums.ShipmentStatus;
 import org.springframework.stereotype.Component;
 
@@ -52,6 +53,84 @@ public class ShipmentAuditEventFactory {
                         + shipment.getId()
                         + "/status",
                 200
+        );
+    }
+
+    public AuditEventRequest cargoVerified(
+            Shipment shipment,
+            CurrentActor actor
+    ) {
+        return create(
+                shipment,
+                actor,
+                "CARGO_VERIFIED",
+                "Shipment cargo verification confirmed successfully",
+                "PUT",
+                "/api/admin/shipments/"
+                        + shipment.getId()
+                        + "/cargo-verification",
+                200
+        );
+    }
+
+    public AuditEventRequest adminProcessingStarted(
+            Shipment shipment,
+            CurrentActor actor
+    ) {
+        return create(
+                shipment,
+                actor,
+                "ADMIN_PROCESSING_STARTED",
+                "Administrative shipment processing started",
+                "POST",
+                "/api/admin/shipments/"
+                        + shipment.getId()
+                        + "/processing/start",
+                200
+        );
+    }
+
+    public AuditEventRequest processingAdvanced(
+            Shipment shipment,
+            ProcessingStage previousStage,
+            CurrentActor actor
+    ) {
+        String description =
+                "Shipment processing advanced from "
+                        + previousStage
+                        + " to "
+                        + shipment.getProcessingStage();
+
+        return create(
+                shipment,
+                actor,
+                "SHIPMENT_PROCESSING_ADVANCED",
+                description,
+                "POST",
+                "/api/admin/shipments/"
+                        + shipment.getId()
+                        + "/processing/continue",
+                200
+        );
+    }
+    public AuditEventRequest ebillGenerated(
+            Shipment shipment,
+            CurrentActor actor
+    ) {
+        String description =
+                "Shipment eBill generated successfully with number "
+                        + shipment.getEbillNumber();
+
+        return create(
+                shipment,
+                actor,
+                "EBILL_GENERATED",
+                description,
+                "POST",
+                "/api/admin/shipments/"
+                        + shipment.getId()
+                        + "/ebill",
+                201
         );
     }
 

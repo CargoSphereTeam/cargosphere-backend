@@ -1,6 +1,11 @@
 package com.cargosphere.shipment.exception;
 
-import lombok.*;
+import com.cargosphere.shipment.entity.enums.ProcessingStage;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -23,4 +28,8 @@ public class ApiErrorResponse {
     private String path;
 
     private Map<String, String> validationErrors;
+
+    private String code;
+
+    private ProcessingStage currentStage;
 }

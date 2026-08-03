@@ -71,8 +71,13 @@ public class SecurityConfig {
                                 "/actuator/info"
                         ).permitAll()
 
-                        .requestMatchers("/api/shipments/**")
-                        .authenticated()
+                        .requestMatchers(
+                                "/api/admin/shipments/**"
+                        ).authenticated()
+
+                        .requestMatchers(
+                                "/api/shipments/**"
+                        ).authenticated()
 
                         .anyRequest()
                         .denyAll()

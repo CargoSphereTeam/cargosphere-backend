@@ -58,6 +58,25 @@ app:
     connect-timeout: ${AUDIT_CONNECT_TIMEOUT:PT2S}
     read-timeout: ${AUDIT_READ_TIMEOUT:PT3S}
 
+  auth-client:
+    base-url: ${AUTH_SERVICE_URL:http://localhost:8081}
+    connect-timeout: ${AUTH_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${AUTH_READ_TIMEOUT:PT3S}
+  container-client:
+    base-url: ${CONTAINER_SERVICE_URL:http://localhost:8083}
+    connect-timeout: ${CONTAINER_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${CONTAINER_READ_TIMEOUT:PT3S}
+
+  document-client:
+    base-url: ${DOCUMENT_SERVICE_URL:http://localhost:8084}
+    connect-timeout: ${DOCUMENT_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${DOCUMENT_READ_TIMEOUT:PT3S}
+
+  payment-client:
+    base-url: ${PAYMENT_SERVICE_URL:http://localhost:8085}
+    connect-timeout: ${PAYMENT_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${PAYMENT_READ_TIMEOUT:PT3S}
+
 springdoc:
   api-docs:
     path: /v3/api-docs

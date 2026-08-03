@@ -99,6 +99,42 @@ class ShipmentAuditPublisherTest {
                 .publish(event);
     }
 
+    @Test
+    void publishEbillGeneratedShouldPublishEvent() {
+        Shipment shipment =
+                shipment(ShipmentStatus.BOOKED);
+
+        shipment.setEbillNumber(
+                "EBL-20260803-A1B2C3D4"
+        );
+
+        CurrentActor actor =
+                new CurrentActor(
+                        1L,
+                        "ROLE_ADMIN"
+                );
+
+        AuditEventRequest event =
+                event("EBILL_GENERATED");
+
+        when(shipmentActorProvider
+                .getCurrentActor())
+                .thenReturn(actor);
+
+        when(shipmentAuditEventFactory
+                .ebillGenerated(
+                        shipment,
+                        actor
+                ))
+                .thenReturn(event);
+
+        shipmentAuditPublisher
+                .publishEbillGenerated(shipment);
+
+        verify(auditClient)
+                .publish(event);
+    }
+
     private Shipment shipment(
             ShipmentStatus status
     ) {

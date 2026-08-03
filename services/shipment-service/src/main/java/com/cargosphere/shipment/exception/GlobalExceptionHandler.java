@@ -105,7 +105,8 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(InvalidShipmentOperationException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidShipmentOperationException(
+    public ResponseEntity<ApiErrorResponse>
+    handleInvalidShipmentOperationException(
             InvalidShipmentOperationException exception,
             HttpServletRequest request
     ) {
@@ -118,9 +119,58 @@ public class GlobalExceptionHandler {
                 .validationErrors(null)
                 .build();
 
-        return ResponseEntity.badRequest().body(response);
+        return ResponseEntity
+                .badRequest()
+                .body(response);
     }
 
+    @ExceptionHandler(InvalidProcessingStageException.class)
+    public ResponseEntity<ApiErrorResponse>
+    handleInvalidProcessingStageException(
+            InvalidProcessingStageException exception,
+            HttpServletRequest request
+    ) {
+        ApiErrorResponse response = ApiErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.CONFLICT.value())
+                .error(HttpStatus.CONFLICT.getReasonPhrase())
+                .message(exception.getMessage())
+                .path(request.getRequestURI())
+                .validationErrors(null)
+                .code(exception.getCode())
+                .currentStage(exception.getCurrentStage())
+                .build();
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(response);
+    }
+
+    @ExceptionHandler(DownstreamServiceException.class)
+    public ResponseEntity<ApiErrorResponse>
+    handleDownstreamServiceException(
+            DownstreamServiceException exception,
+            HttpServletRequest request
+    ) {
+        ApiErrorResponse response = ApiErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(
+                        HttpStatus.SERVICE_UNAVAILABLE.value()
+                )
+                .error(
+                        HttpStatus.SERVICE_UNAVAILABLE
+                                .getReasonPhrase()
+                )
+                .message(exception.getMessage())
+                .path(request.getRequestURI())
+                .validationErrors(null)
+                .code("DOWNSTREAM_SERVICE_UNAVAILABLE")
+                .build();
+
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(response);
+    }
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleGeneralException(
             Exception exception,

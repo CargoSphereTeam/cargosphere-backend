@@ -121,6 +121,60 @@ class ShipmentAuditEventFactoryTest {
         );
     }
 
+    @Test
+    void ebillGeneratedShouldCreateSuccessEvent() {
+        Shipment shipment = shipment();
+
+        shipment.setEbillNumber(
+                "EBL-20260803-A1B2C3D4"
+        );
+
+        AuditEventRequest event =
+                factory.ebillGenerated(
+                        shipment,
+                        new CurrentActor(
+                                1L,
+                                "ROLE_ADMIN"
+                        )
+                );
+
+        assertEquals(
+                "EBILL_GENERATED",
+                event.action()
+        );
+
+        assertEquals(
+                1L,
+                event.actorUserId()
+        );
+
+        assertEquals(
+                "ROLE_ADMIN",
+                event.actorRole()
+        );
+
+        assertEquals(
+                "Shipment eBill generated successfully with number "
+                        + "EBL-20260803-A1B2C3D4",
+                event.description()
+        );
+
+        assertEquals(
+                "POST",
+                event.httpMethod()
+        );
+
+        assertEquals(
+                "/api/admin/shipments/55/ebill",
+                event.endpoint()
+        );
+
+        assertEquals(
+                201,
+                event.statusCode()
+        );
+    }
+
     private Shipment shipment() {
         return Shipment.builder()
                 .id(55L)
