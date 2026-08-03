@@ -61,22 +61,105 @@ public class HttpShipmentDocumentClient
             return List.copyOf(response);
 
         } catch (RestClientResponseException exception) {
-            throw new DownstreamServiceException(
-                    SERVICE_NAME,
-                    "Document-service rejected document lookup for shipment ID "
-                            + shipmentId
-                            + " with status "
-                            + exception.getStatusCode(),
+            throw createRejectedException(
+                    shipmentId,
+                    "document lookup",
                     exception
             );
 
         } catch (RestClientException exception) {
-            throw new DownstreamServiceException(
-                    SERVICE_NAME,
-                    "Document-service is unavailable while checking shipment ID "
-                            + shipmentId,
+            throw createUnavailableException(
+                    shipmentId,
+                    "loading documents",
                     exception
             );
         }
+    }
+
+    @Override
+    public ShipmentDocumentReadinessResponse
+    getDocumentReadiness(Long shipmentId) {
+
+        String token = tokenProvider.getTokenValue();
+
+        try {
+            ShipmentDocumentReadinessResponse response =
+                    restClient
+                            .get()
+                            .uri(
+                                    "/api/documents/shipment/"
+                                            + "{shipmentId}/readiness",
+                                    shipmentId
+                            )
+                            .headers(headers ->
+                                    headers.setBearerAuth(token)
+                            )
+                            .retrieve()
+                            .body(
+                                    ShipmentDocumentReadinessResponse.class
+                            );
+
+            if (response == null) {
+                throw new DownstreamServiceException(
+                        SERVICE_NAME,
+                        "Document-service returned an empty readiness "
+                                + "response for shipment ID "
+                                + shipmentId
+                );
+            }
+
+            return response;
+
+        } catch (RestClientResponseException exception) {
+            throw createRejectedException(
+                    shipmentId,
+                    "readiness lookup",
+                    exception
+            );
+
+        } catch (DownstreamServiceException exception) {
+            throw exception;
+
+        } catch (RestClientException exception) {
+            throw createUnavailableException(
+                    shipmentId,
+                    "checking document readiness",
+                    exception
+            );
+        }
+    }
+
+    private DownstreamServiceException
+    createRejectedException(
+            Long shipmentId,
+            String operation,
+            RestClientResponseException exception
+    ) {
+        return new DownstreamServiceException(
+                SERVICE_NAME,
+                "Document-service rejected "
+                        + operation
+                        + " for shipment ID "
+                        + shipmentId
+                        + " with status "
+                        + exception.getStatusCode(),
+                exception
+        );
+    }
+
+    private DownstreamServiceException
+    createUnavailableException(
+            Long shipmentId,
+            String operation,
+            RestClientException exception
+    ) {
+        return new DownstreamServiceException(
+                SERVICE_NAME,
+                "Document-service is unavailable while "
+                        + operation
+                        + " for shipment ID "
+                        + shipmentId,
+                exception
+        );
     }
 }

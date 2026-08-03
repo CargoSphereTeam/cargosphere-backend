@@ -6,4 +6,7 @@ public interface ShipmentDocumentClient {
 
     List<ShipmentDocumentResponse>
     getDocumentsByShipmentId(Long shipmentId);
+
+    ShipmentDocumentReadinessResponse
+    getDocumentReadiness(Long shipmentId);
 }

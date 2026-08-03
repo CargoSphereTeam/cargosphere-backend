@@ -7,7 +7,7 @@ import com.cargosphere.shipment.entity.Shipment;
 import com.cargosphere.shipment.entity.enums.CargoVerificationStatus;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.integration.container.ContainerAllocationResponse;
-import com.cargosphere.shipment.integration.document.ShipmentDocumentResponse;
+import com.cargosphere.shipment.integration.document.ShipmentDocumentReadinessResponse;
 import com.cargosphere.shipment.integration.payment.ShipmentPaymentResponse;
 import org.springframework.stereotype.Component;
 
@@ -24,7 +24,7 @@ public class ProcessingReadinessEvaluator {
             List<ContainerAllocationResponse> allocations,
             List<CargoDetail> cargoDetails,
             List<CargoVerification> cargoVerifications,
-            List<ShipmentDocumentResponse> documents,
+            ShipmentDocumentReadinessResponse documentReadiness,
             List<ShipmentPaymentResponse> payments
     ) {
         Long shipmentId = shipment.getId();
@@ -44,7 +44,7 @@ public class ProcessingReadinessEvaluator {
         boolean documentsReady =
                 areDocumentsReady(
                         shipmentId,
-                        documents
+                        documentReadiness
                 );
 
         boolean paymentReady =
@@ -70,7 +70,8 @@ public class ProcessingReadinessEvaluator {
                         cargoReady,
                         documentsReady,
                         paymentReady,
-                        processingStageReady
+                        processingStageReady,
+                        documentReadiness
                 );
 
         return ProcessingReadinessResponse.builder()
@@ -94,19 +95,20 @@ public class ProcessingReadinessEvaluator {
             Long shipmentId,
             List<ContainerAllocationResponse> allocations
     ) {
+        if (allocations == null || allocations.isEmpty()) {
+            return false;
+        }
+
         return allocations.stream()
                 .anyMatch(allocation ->
                         allocation != null
-                                && allocation.allocationId()
-                                != null
+                                && allocation.allocationId() != null
                                 && Objects.equals(
                                 allocation.shipmentId(),
                                 shipmentId
                         )
-                                && allocation.containerTypeId()
-                                != null
-                                && allocation.quantity()
-                                != null
+                                && allocation.containerTypeId() != null
+                                && allocation.quantity() != null
                                 && allocation.quantity() >= 1
                 );
     }
@@ -115,7 +117,11 @@ public class ProcessingReadinessEvaluator {
             List<CargoDetail> cargoDetails,
             List<CargoVerification> verifications
     ) {
-        if (cargoDetails.isEmpty()) {
+        if (cargoDetails == null || cargoDetails.isEmpty()) {
+            return false;
+        }
+
+        if (verifications == null) {
             return false;
         }
 
@@ -130,41 +136,26 @@ public class ProcessingReadinessEvaluator {
 
     public boolean areDocumentsReady(
             Long shipmentId,
-            List<ShipmentDocumentResponse> documents
+            ShipmentDocumentReadinessResponse readiness
     ) {
-        if (documents.isEmpty()) {
-            return false;
-        }
-
-        return documents.stream()
-                .allMatch(document -> {
-                    if (document == null
-                            || document.id() == null
-                            || !Objects.equals(
-                            document.shipmentId(),
-                            shipmentId
-                    )) {
-                        return false;
-                    }
-
-                    if (!Boolean.TRUE.equals(
-                            document.required()
-                    )) {
-                        return true;
-                    }
-
-                    return "VERIFIED".equalsIgnoreCase(
-                            document.verificationStatus()
-                    )
-                            && document.verifiedBy() != null
-                            && document.verifiedAt() != null;
-                });
+        return readiness != null
+                && Objects.equals(
+                readiness.shipmentId(),
+                shipmentId
+        )
+                && readiness.requiredDocuments() > 0
+                && readiness.blockingRequiredDocuments() == 0
+                && readiness.allMandatoryDocumentsResolved();
     }
 
     public boolean isPaymentReady(
             Long shipmentId,
             List<ShipmentPaymentResponse> payments
     ) {
+        if (payments == null || payments.isEmpty()) {
+            return false;
+        }
+
         return payments.stream()
                 .anyMatch(payment ->
                         payment != null
@@ -201,10 +192,8 @@ public class ProcessingReadinessEvaluator {
                                 && verification
                                 .getVerificationStatus()
                                 == CargoVerificationStatus.CONFIRMED
-                                && verification.getVerifiedBy()
-                                != null
-                                && verification.getVerifiedAt()
-                                != null
+                                && verification.getVerifiedBy() != null
+                                && verification.getVerifiedAt() != null
                 );
     }
 
@@ -213,7 +202,8 @@ public class ProcessingReadinessEvaluator {
             boolean cargoReady,
             boolean documentsReady,
             boolean paymentReady,
-            boolean processingStageReady
+            boolean processingStageReady,
+            ShipmentDocumentReadinessResponse documentReadiness
     ) {
         List<String> reasons = new ArrayList<>();
 
@@ -230,9 +220,28 @@ public class ProcessingReadinessEvaluator {
         }
 
         if (!documentsReady) {
-            reasons.add(
-                    "All required shipment documents must be verified"
-            );
+            if (
+                    documentReadiness != null
+                            && documentReadiness
+                            .blockingDocumentTypes() != null
+                            && !documentReadiness
+                            .blockingDocumentTypes()
+                            .isEmpty()
+            ) {
+                reasons.add(
+                        "Required documents are unresolved: "
+                                + String.join(
+                                ", ",
+                                documentReadiness
+                                        .blockingDocumentTypes()
+                        )
+                );
+            } else {
+                reasons.add(
+                        "All required shipment documents must be "
+                                + "VERIFIED or NOT_APPLICABLE"
+                );
+            }
         }
 
         if (!paymentReady) {
@@ -243,7 +252,7 @@ public class ProcessingReadinessEvaluator {
 
         if (!processingStageReady) {
             reasons.add(
-                    "Processing stage must be READY_FOR_EBILL"
+                    "Shipment processing stage must be READY_FOR_EBILL"
             );
         }
 

@@ -16,7 +16,6 @@ import com.cargosphere.shipment.entity.CargoDetail;
 import com.cargosphere.shipment.entity.CargoVerification;
 import com.cargosphere.shipment.entity.Shipment;
 import com.cargosphere.shipment.entity.ShipmentEvent;
-import com.cargosphere.shipment.entity.enums.CargoVerificationStatus;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.entity.enums.ShipmentEventType;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
@@ -27,6 +26,7 @@ import com.cargosphere.shipment.integration.auth.AuthUserResponse;
 import com.cargosphere.shipment.integration.container.ContainerAllocationClient;
 import com.cargosphere.shipment.integration.container.ContainerAllocationResponse;
 import com.cargosphere.shipment.integration.document.ShipmentDocumentClient;
+import com.cargosphere.shipment.integration.document.ShipmentDocumentReadinessResponse;
 import com.cargosphere.shipment.integration.document.ShipmentDocumentResponse;
 import com.cargosphere.shipment.integration.payment.ShipmentPaymentClient;
 import com.cargosphere.shipment.integration.payment.ShipmentPaymentResponse;
@@ -53,7 +53,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -187,6 +186,7 @@ public class AdminShipmentProcessingServiceImpl
                 )
                 .build();
     }
+
     @Override
     @Transactional(readOnly = true)
     public ProcessingQueueResponse getProcessingQueue(
@@ -257,9 +257,9 @@ public class AdminShipmentProcessingServiceImpl
                                 shipmentId
                         );
 
-        List<ShipmentDocumentResponse> documents =
+        ShipmentDocumentReadinessResponse documentReadiness =
                 shipmentDocumentClient
-                        .getDocumentsByShipmentId(shipmentId);
+                        .getDocumentReadiness(shipmentId);
 
         List<ShipmentPaymentResponse> payments =
                 shipmentPaymentClient
@@ -270,7 +270,7 @@ public class AdminShipmentProcessingServiceImpl
                 allocations,
                 cargoDetails,
                 cargoVerifications,
-                documents,
+                documentReadiness,
                 payments
         );
     }
@@ -305,6 +305,10 @@ public class AdminShipmentProcessingServiceImpl
                 shipmentDocumentClient
                         .getDocumentsByShipmentId(shipmentId);
 
+        ShipmentDocumentReadinessResponse documentReadiness =
+                shipmentDocumentClient
+                        .getDocumentReadiness(shipmentId);
+
         List<ShipmentPaymentResponse> payments =
                 shipmentPaymentClient
                         .getPaymentsByShipmentId(shipmentId);
@@ -321,7 +325,7 @@ public class AdminShipmentProcessingServiceImpl
                         allocations,
                         cargoDetails,
                         cargoVerifications,
-                        documents,
+                        documentReadiness,
                         payments
                 );
 
@@ -383,6 +387,10 @@ public class AdminShipmentProcessingServiceImpl
                 shipmentDocumentClient
                         .getDocumentsByShipmentId(shipmentId);
 
+        ShipmentDocumentReadinessResponse documentReadiness =
+                shipmentDocumentClient
+                        .getDocumentReadiness(shipmentId);
+
         List<ShipmentPaymentResponse> payments =
                 shipmentPaymentClient
                         .getPaymentsByShipmentId(shipmentId);
@@ -399,7 +407,7 @@ public class AdminShipmentProcessingServiceImpl
                         allocations,
                         cargoDetails,
                         cargoVerifications,
-                        documents,
+                        documentReadiness,
                         payments
                 );
 
@@ -517,102 +525,32 @@ public class AdminShipmentProcessingServiceImpl
             Long shipmentId,
             List<ContainerAllocationResponse> allocations
     ) {
+        if (allocations == null || allocations.isEmpty()) {
+            return false;
+        }
+
         return allocations.stream()
                 .anyMatch(allocation ->
                         allocation != null
-                                && allocation.allocationId()
-                                != null
+                                && allocation.allocationId() != null
                                 && Objects.equals(
                                 allocation.shipmentId(),
                                 shipmentId
                         )
-                                && allocation.containerTypeId()
-                                != null
-                                && allocation.quantity()
-                                != null
+                                && allocation.containerTypeId() != null
+                                && allocation.quantity() != null
                                 && allocation.quantity() >= 1
                 );
-    }
-
-    private boolean isCargoReady(
-            List<CargoDetail> cargoDetails,
-            List<CargoVerification> verifications
-    ) {
-        if (cargoDetails.isEmpty()) {
-            return false;
-        }
-
-        return cargoDetails.stream()
-                .allMatch(cargoDetail ->
-                        hasConfirmedVerification(
-                                cargoDetail,
-                                verifications
-                        )
-                );
-    }
-
-    private boolean hasConfirmedVerification(
-            CargoDetail cargoDetail,
-            List<CargoVerification> verifications
-    ) {
-        return verifications.stream()
-                .anyMatch(verification ->
-                        verification != null
-                                && verification
-                                .getCargoDetail() != null
-                                && Objects.equals(
-                                verification
-                                        .getCargoDetail()
-                                        .getId(),
-                                cargoDetail.getId()
-                        )
-                                && verification
-                                .getVerificationStatus()
-                                == CargoVerificationStatus.CONFIRMED
-                                && verification.getVerifiedBy()
-                                != null
-                                && verification.getVerifiedAt()
-                                != null
-                );
-    }
-
-    private boolean areDocumentsReady(
-            Long shipmentId,
-            List<ShipmentDocumentResponse> documents
-    ) {
-        if (documents.isEmpty()) {
-            return false;
-        }
-
-        return documents.stream()
-                .allMatch(document -> {
-                    if (document == null
-                            || document.id() == null
-                            || !Objects.equals(
-                            document.shipmentId(),
-                            shipmentId
-                    )) {
-                        return false;
-                    }
-
-                    if (!Boolean.TRUE.equals(
-                            document.required()
-                    )) {
-                        return true;
-                    }
-
-                    return "VERIFIED".equalsIgnoreCase(
-                            document.verificationStatus()
-                    )
-                            && document.verifiedBy() != null
-                            && document.verifiedAt() != null;
-                });
     }
 
     private boolean isPaymentReady(
             Long shipmentId,
             List<ShipmentPaymentResponse> payments
     ) {
+        if (payments == null || payments.isEmpty()) {
+            return false;
+        }
+
         return payments.stream()
                 .anyMatch(payment ->
                         payment != null
@@ -684,10 +622,12 @@ public class AdminShipmentProcessingServiceImpl
                                 shipmentId
                         );
 
-        if (!isContainerReady(
-                shipmentId,
-                allocations
-        )) {
+        if (
+                !isContainerReady(
+                        shipmentId,
+                        allocations
+                )
+        ) {
             throw new InvalidShipmentOperationException(
                     "A valid container allocation is required "
                             + "before continuing shipment "
@@ -701,20 +641,36 @@ public class AdminShipmentProcessingServiceImpl
     private ProcessingStage continueAfterDocumentVerification(
             Long shipmentId
     ) {
-        List<ShipmentDocumentResponse> documents =
+        ShipmentDocumentReadinessResponse readiness =
                 shipmentDocumentClient
-                        .getDocumentsByShipmentId(
+                        .getDocumentReadiness(
                                 shipmentId
                         );
 
-        if (!areDocumentsReady(
-                shipmentId,
-                documents
-        )) {
+        if (
+                !processingReadinessEvaluator
+                        .areDocumentsReady(
+                                shipmentId,
+                                readiness
+                        )
+        ) {
+            String blockingDocuments =
+                    readiness == null
+                            || readiness.blockingDocumentTypes() == null
+                            || readiness.blockingDocumentTypes().isEmpty()
+                            ? "unknown required documents"
+                            : String.join(
+                            ", ",
+                            readiness.blockingDocumentTypes()
+                    );
+
             throw new InvalidShipmentOperationException(
-                    "All required shipment documents must be verified "
-                            + "before continuing shipment "
+                    "All required shipment documents must be "
+                            + "VERIFIED or NOT_APPLICABLE before "
+                            + "continuing shipment "
                             + shipmentId
+                            + ". Blocking documents: "
+                            + blockingDocuments
             );
         }
 
@@ -730,10 +686,12 @@ public class AdminShipmentProcessingServiceImpl
                                 shipmentId
                         );
 
-        if (!isPaymentReady(
-                shipmentId,
-                payments
-        )) {
+        if (
+                !isPaymentReady(
+                        shipmentId,
+                        payments
+                )
+        ) {
             throw new InvalidShipmentOperationException(
                     "At least one valid PAID payment is required "
                             + "before continuing shipment "
@@ -808,54 +766,14 @@ public class AdminShipmentProcessingServiceImpl
 
         shipmentEventRepository.save(event);
     }
-    private List<String> buildBlockingReasons(
-            boolean containerReady,
-            boolean cargoReady,
-            boolean documentsReady,
-            boolean paymentReady,
-            boolean processingStageReady
-    ) {
-        List<String> reasons = new ArrayList<>();
-
-        if (!containerReady) {
-            reasons.add(
-                    "No valid container allocation exists"
-            );
-        }
-
-        if (!cargoReady) {
-            reasons.add(
-                    "All shipment cargo items must be confirmed"
-            );
-        }
-
-        if (!documentsReady) {
-            reasons.add(
-                    "All required shipment documents must be verified"
-            );
-        }
-
-        if (!paymentReady) {
-            reasons.add(
-                    "At least one valid PAID payment is required"
-            );
-        }
-
-        if (!processingStageReady) {
-            reasons.add(
-                    "Processing stage must be READY_FOR_EBILL"
-            );
-        }
-
-        return List.copyOf(reasons);
-    }
 
     private void validateEbillGenerationStage(
             Shipment shipment
     ) {
-        if (shipment.getProcessingStage()
-                != ProcessingStage.READY_FOR_EBILL) {
-
+        if (
+                shipment.getProcessingStage()
+                        != ProcessingStage.READY_FOR_EBILL
+        ) {
             throw new InvalidProcessingStageException(
                     shipment.getId(),
                     ProcessingStage.READY_FOR_EBILL,
@@ -899,8 +817,10 @@ public class AdminShipmentProcessingServiceImpl
                             generatedAt
                     );
 
-            if (!shipmentRepository
-                    .existsByEbillNumber(candidate)) {
+            if (
+                    !shipmentRepository
+                            .existsByEbillNumber(candidate)
+            ) {
                 return candidate;
             }
         }
@@ -964,7 +884,9 @@ public class AdminShipmentProcessingServiceImpl
                 .build();
     }
 
-    private Shipment findShipmentById(Long shipmentId) {
+    private Shipment findShipmentById(
+            Long shipmentId
+    ) {
         return shipmentRepository.findById(shipmentId)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
@@ -1008,7 +930,8 @@ public class AdminShipmentProcessingServiceImpl
         };
     }
 
-    private ProcessingQueueItemResponse toQueueItemResponse(
+    private ProcessingQueueItemResponse
+    toQueueItemResponse(
             Shipment shipment
     ) {
         return ProcessingQueueItemResponse.builder()
@@ -1058,9 +981,10 @@ public class AdminShipmentProcessingServiceImpl
     private void validateCurrentStage(
             Shipment shipment
     ) {
-        if (shipment.getProcessingStage()
-                != ProcessingStage.PENDING_ADMIN_REVIEW) {
-
+        if (
+                shipment.getProcessingStage()
+                        != ProcessingStage.PENDING_ADMIN_REVIEW
+        ) {
             throw new InvalidProcessingStageException(
                     shipment.getId(),
                     ProcessingStage.PENDING_ADMIN_REVIEW,

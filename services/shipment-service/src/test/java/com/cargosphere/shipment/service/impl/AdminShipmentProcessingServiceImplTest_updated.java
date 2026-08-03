@@ -31,6 +31,7 @@ import com.cargosphere.shipment.integration.auth.AuthUserResponse;
 import com.cargosphere.shipment.integration.container.ContainerAllocationClient;
 import com.cargosphere.shipment.integration.container.ContainerAllocationResponse;
 import com.cargosphere.shipment.integration.document.ShipmentDocumentClient;
+import com.cargosphere.shipment.integration.document.ShipmentDocumentReadinessResponse;
 import com.cargosphere.shipment.integration.document.ShipmentDocumentResponse;
 import com.cargosphere.shipment.integration.payment.ShipmentPaymentClient;
 import com.cargosphere.shipment.integration.payment.ShipmentPaymentResponse;
@@ -624,37 +625,6 @@ class AdminShipmentProcessingServiceImplTest {
                         )
                 );
 
-        ShipmentDocumentResponse document =
-                new ShipmentDocumentResponse(
-                        1L,
-                        10L,
-                        "COMMERCIAL_INVOICE",
-                        true,
-                        "VERIFIED",
-                        5L,
-                        LocalDateTime.of(
-                                2026,
-                                8,
-                                2,
-                                10,
-                                0
-                        ),
-                        "Verified",
-                        LocalDateTime.of(
-                                2026,
-                                8,
-                                2,
-                                9,
-                                0
-                        ),
-                        LocalDateTime.of(
-                                2026,
-                                8,
-                                2,
-                                10,
-                                0
-                        )
-                );
 
         ShipmentPaymentResponse payment =
                 new ShipmentPaymentResponse(
@@ -703,9 +673,12 @@ class AdminShipmentProcessingServiceImplTest {
                 ))
                 .thenReturn(List.of(verification));
 
+
         when(shipmentDocumentClient
-                .getDocumentsByShipmentId(10L))
-                .thenReturn(List.of(document));
+                .getDocumentReadiness(10L))
+                .thenReturn(
+                        readyDocumentReadiness()
+                );
 
         when(shipmentPaymentClient
                 .getPaymentsByShipmentId(10L))
@@ -923,6 +896,12 @@ class AdminShipmentProcessingServiceImplTest {
         when(shipmentDocumentClient
                 .getDocumentsByShipmentId(10L))
                 .thenReturn(List.of(document));
+
+        when(shipmentDocumentClient
+                .getDocumentReadiness(10L))
+                .thenReturn(
+                        readyDocumentReadiness()
+                );
 
         when(shipmentPaymentClient
                 .getPaymentsByShipmentId(10L))
@@ -1146,6 +1125,12 @@ class AdminShipmentProcessingServiceImplTest {
         when(shipmentDocumentClient
                 .getDocumentsByShipmentId(10L))
                 .thenReturn(List.of(document));
+
+        when(shipmentDocumentClient
+                .getDocumentReadiness(10L))
+                .thenReturn(
+                        readyDocumentReadiness()
+                );
 
         when(shipmentPaymentClient
                 .getPaymentsByShipmentId(10L))
@@ -1477,6 +1462,12 @@ class AdminShipmentProcessingServiceImplTest {
                 .getDocumentsByShipmentId(10L))
                 .thenReturn(List.of());
 
+        when(shipmentDocumentClient
+                .getDocumentReadiness(10L))
+                .thenReturn(
+                        blockedDocumentReadiness()
+                );
+
         when(shipmentPaymentClient
                 .getPaymentsByShipmentId(10L))
                 .thenReturn(List.of());
@@ -1495,7 +1486,8 @@ class AdminShipmentProcessingServiceImplTest {
                         "Shipment 10 is not ready for eBill generation: "
                                 + "No valid container allocation exists; "
                                 + "All shipment cargo items must be confirmed; "
-                                + "All required shipment documents must be verified; "
+                                + "Required documents are unresolved: "
+                                + "COMMERCIAL_INVOICE, PACKING_LIST; "
                                 + "At least one valid PAID payment is required"
                 );
 
@@ -1752,8 +1744,10 @@ class AdminShipmentProcessingServiceImplTest {
                 .thenReturn(List.of());
 
         when(shipmentDocumentClient
-                .getDocumentsByShipmentId(10L))
-                .thenReturn(List.of());
+                .getDocumentReadiness(10L))
+                .thenReturn(
+                        blockedDocumentReadiness()
+                );
 
         when(shipmentPaymentClient
                 .getPaymentsByShipmentId(10L))
@@ -1781,7 +1775,8 @@ class AdminShipmentProcessingServiceImplTest {
                 .containsExactly(
                         "No valid container allocation exists",
                         "All shipment cargo items must be confirmed",
-                        "All required shipment documents must be verified",
+                        "Required documents are unresolved: "
+                                + "COMMERCIAL_INVOICE, PACKING_LIST",
                         "At least one valid PAID payment is required"
                 );
     }
@@ -1963,8 +1958,10 @@ class AdminShipmentProcessingServiceImplTest {
                 .thenReturn(Optional.of(shipment));
 
         when(shipmentDocumentClient
-                .getDocumentsByShipmentId(10L))
-                .thenReturn(List.of(document));
+                .getDocumentReadiness(10L))
+                .thenReturn(
+                        readyDocumentReadiness()
+                );
 
         when(shipmentRepository.save(shipment))
                 .thenReturn(shipment);
@@ -1998,7 +1995,7 @@ class AdminShipmentProcessingServiceImplTest {
                 );
 
         verify(shipmentDocumentClient)
-                .getDocumentsByShipmentId(10L);
+                .getDocumentReadiness(10L);
 
         verify(shipmentRepository)
                 .save(shipment);
@@ -2151,8 +2148,10 @@ class AdminShipmentProcessingServiceImplTest {
                 .thenReturn(Optional.of(shipment));
 
         when(shipmentDocumentClient
-                .getDocumentsByShipmentId(10L))
-                .thenReturn(List.of(document));
+                .getDocumentReadiness(10L))
+                .thenReturn(
+                        blockedDocumentReadiness()
+                );
 
         assertThatThrownBy(() ->
                 service.continueProcessing(10L)
@@ -2161,8 +2160,10 @@ class AdminShipmentProcessingServiceImplTest {
                         InvalidShipmentOperationException.class
                 )
                 .hasMessage(
-                        "All required shipment documents must be verified "
-                                + "before continuing shipment 10"
+                        "All required shipment documents must be "
+                                + "VERIFIED or NOT_APPLICABLE before "
+                                + "continuing shipment 10. Blocking documents: "
+                                + "COMMERCIAL_INVOICE, PACKING_LIST"
                 );
 
         assertThat(shipment.getProcessingStage())
@@ -2276,7 +2277,7 @@ class AdminShipmentProcessingServiceImplTest {
                 .getAllocationsByShipmentId(any());
 
         verify(shipmentDocumentClient, never())
-                .getDocumentsByShipmentId(any());
+                .getDocumentReadiness(any());
 
         verify(shipmentPaymentClient, never())
                 .getPaymentsByShipmentId(any());
@@ -2338,6 +2339,37 @@ class AdminShipmentProcessingServiceImplTest {
                         ProcessingStage.CONTAINER_ALLOCATION
                 );
     }
+    private ShipmentDocumentReadinessResponse
+    readyDocumentReadiness() {
+        return new ShipmentDocumentReadinessResponse(
+                10L,
+                5,
+                4,
+                3,
+                1,
+                0,
+                true,
+                List.of()
+        );
+    }
+
+    private ShipmentDocumentReadinessResponse
+    blockedDocumentReadiness() {
+        return new ShipmentDocumentReadinessResponse(
+                10L,
+                5,
+                4,
+                2,
+                0,
+                2,
+                false,
+                List.of(
+                        "COMMERCIAL_INVOICE",
+                        "PACKING_LIST"
+                )
+        );
+    }
+
     private Shipment createShipment(
             ProcessingStage processingStage
     ) {
