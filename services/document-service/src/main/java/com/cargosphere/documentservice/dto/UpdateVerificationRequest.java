@@ -22,8 +22,10 @@ public class UpdateVerificationRequest {
             example = "VERIFIED",
             allowableValues = {
                     "PENDING",
+                    "SUBMITTED",
                     "VERIFIED",
-                    "REJECTED"
+                    "REJECTED",
+                    "NOT_APPLICABLE"
             },
             requiredMode = Schema.RequiredMode.REQUIRED
     )

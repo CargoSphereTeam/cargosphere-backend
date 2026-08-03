@@ -308,26 +308,55 @@ class DocumentServiceImplTest {
         verify(documentRepository, never()).save(any());
     }
 
-    @Test
-    void updateVerification_shouldRejectPendingStatus() {
-        UpdateVerificationRequest request =
-                verificationRequest(
-                        VerificationStatus.PENDING,
-                        "Still pending"
-                );
+@Test
+void updateVerification_shouldMarkDocumentPending() {
+    Document document =
+            createDocument(1L, 1001L, "INVOICE");
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> documentService.updateVerification(1L, request)
-        );
+    document.setVerificationStatus(
+            VerificationStatus.VERIFIED
+    );
+    document.setVerifiedBy(10L);
+    document.setVerifiedAt(LocalDateTime.now());
 
-        assertEquals(
-                "Verification status must be VERIFIED or REJECTED",
-                exception.getMessage()
-        );
+    UpdateVerificationRequest request =
+            verificationRequest(
+                    VerificationStatus.PENDING,
+                    "Waiting for resubmission"
+            );
 
-        verifyNoInteractions(documentRepository);
-    }
+    when(documentRepository.findById(1L))
+            .thenReturn(Optional.of(document));
+
+    when(documentRepository.save(document))
+            .thenReturn(document);
+
+    DocumentResponse response =
+            documentService.updateVerification(
+                    1L,
+                    request
+            );
+
+    assertAll(
+            () -> assertEquals(
+                    VerificationStatus.PENDING,
+                    response.getVerificationStatus()
+            ),
+            () -> assertNull(
+                    response.getVerifiedBy()
+            ),
+            () -> assertNull(
+                    response.getVerifiedAt()
+            ),
+            () -> assertEquals(
+                    "Waiting for resubmission",
+                    response.getRemarks()
+            )
+    );
+
+    verify(documentRepository).findById(1L);
+    verify(documentRepository).save(document);
+}
 
     @Test
     void deleteDocument_shouldDeleteExistingDocument() {

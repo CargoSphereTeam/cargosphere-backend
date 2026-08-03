@@ -2,6 +2,7 @@ package com.cargosphere.documentservice.controller;
 
 import com.cargosphere.documentservice.config.OpenApiConfig;
 import com.cargosphere.documentservice.dto.CreateDocumentRequest;
+import com.cargosphere.documentservice.dto.DocumentReadinessResponse;
 import com.cargosphere.documentservice.dto.DocumentResponse;
 import com.cargosphere.documentservice.dto.ErrorResponse;
 import com.cargosphere.documentservice.dto.UpdateVerificationRequest;
@@ -277,9 +278,69 @@ public class DocumentController {
     }
 
     @Operation(
+            summary = "Get shipment document readiness",
+            description =
+                    "Checks whether every required document is "
+                            + "VERIFIED or NOT_APPLICABLE."
+    )
+    @SecurityRequirement(
+            name = OpenApiConfig.SECURITY_SCHEME_NAME
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description =
+                            "Document readiness returned successfully",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation =
+                                            DocumentReadinessResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Shipment ID must be positive",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = ErrorResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "JWT is missing or invalid"
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "ADMIN role is required"
+            )
+    })
+    @GetMapping("/shipment/{shipmentId}/readiness")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<DocumentReadinessResponse>
+    getDocumentReadiness(
+            @Parameter(
+                    description = "Shipment database ID",
+                    example = "1001",
+                    required = true
+            )
+            @PathVariable
+            @Positive
+            Long shipmentId
+    ) {
+        return ResponseEntity.ok(
+                documentService.getDocumentReadiness(
+                        shipmentId
+                )
+        );
+    }
+
+    @Operation(
             summary = "Update document verification",
             description =
-                    "Marks a document as PENDING, VERIFIED or REJECTED. "
+                    "Updates a document to PENDING, SUBMITTED, VERIFIED, "
+                            + "REJECTED or NOT_APPLICABLE. "
                             + "Requires ROLE_ADMIN."
     )
     @SecurityRequirement(name = OpenApiConfig.SECURITY_SCHEME_NAME)

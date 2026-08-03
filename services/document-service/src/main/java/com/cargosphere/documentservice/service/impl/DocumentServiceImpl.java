@@ -4,6 +4,7 @@ import com.cargosphere.documentservice.audit.CurrentActor;
 import com.cargosphere.documentservice.audit.DocumentActorProvider;
 import com.cargosphere.documentservice.audit.DocumentAuditPublisher;
 import com.cargosphere.documentservice.dto.CreateDocumentRequest;
+import com.cargosphere.documentservice.dto.DocumentReadinessResponse;
 import com.cargosphere.documentservice.dto.DocumentResponse;
 import com.cargosphere.documentservice.dto.UpdateVerificationRequest;
 import com.cargosphere.documentservice.entity.Document;
@@ -37,21 +38,27 @@ public class DocumentServiceImpl implements DocumentService {
     public DocumentResponse createDocument(
             CreateDocumentRequest request
     ) {
-        String normalizedType = request.getDocumentType()
-                .trim()
-                .toUpperCase(Locale.ROOT);
+        String normalizedType =
+                request.getDocumentType()
+                        .trim()
+                        .toUpperCase(Locale.ROOT);
 
-        if (documentRepository.existsByShipmentIdAndDocumentType(
-                request.getShipmentId(),
-                normalizedType
-        )) {
+        boolean alreadyExists =
+                documentRepository
+                        .existsByShipmentIdAndDocumentType(
+                                request.getShipmentId(),
+                                normalizedType
+                        );
+
+        if (alreadyExists) {
             throw new DuplicateDocumentException(
                     "Document type already exists for shipment: "
                             + normalizedType
             );
         }
 
-        Document document = DocumentMapper.toEntity(request);
+        Document document =
+                DocumentMapper.toEntity(request);
 
         Document savedDocument =
                 documentRepository.save(document);
@@ -95,32 +102,32 @@ public class DocumentServiceImpl implements DocumentService {
             Long id,
             UpdateVerificationRequest request
     ) {
-        if (
-                request.getVerificationStatus()
-                        == VerificationStatus.PENDING
-        ) {
-            throw new IllegalArgumentException(
-                    "Verification status must be VERIFIED or REJECTED"
-            );
-        }
+        VerificationStatus status =
+                request.getVerificationStatus();
 
-        CurrentActor actor = getCurrentActor();
+        Document document =
+                findDocument(id);
 
-        if (actor.userId() == null) {
-            throw new IllegalStateException(
-                    "Authenticated user ID is missing"
-            );
-        }
-
-        Document document = findDocument(id);
-
-        document.setVerificationStatus(
-                request.getVerificationStatus()
+        document.setVerificationStatus(status);
+        document.setRemarks(
+                trimToNull(request.getRemarks())
         );
 
-        document.setVerifiedBy(actor.userId());
-        document.setVerifiedAt(LocalDateTime.now());
-        document.setRemarks(request.getRemarks());
+        if (isResolvedStatus(status)) {
+            CurrentActor actor = getCurrentActor();
+
+            if (actor.userId() == null) {
+                throw new IllegalStateException(
+                        "Authenticated user ID is missing"
+                );
+            }
+
+            document.setVerifiedBy(actor.userId());
+            document.setVerifiedAt(LocalDateTime.now());
+        } else {
+            document.setVerifiedBy(null);
+            document.setVerifiedAt(null);
+        }
 
         Document updatedDocument =
                 documentRepository.save(document);
@@ -128,6 +135,68 @@ public class DocumentServiceImpl implements DocumentService {
         publishVerificationEvent(updatedDocument);
 
         return DocumentMapper.toResponse(updatedDocument);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DocumentReadinessResponse getDocumentReadiness(
+            Long shipmentId
+    ) {
+        List<Document> documents =
+                documentRepository.findByShipmentId(
+                        shipmentId
+                );
+
+        List<Document> requiredDocuments =
+                documents.stream()
+                        .filter(document ->
+                                Boolean.TRUE.equals(
+                                        document.getRequired()
+                                )
+                        )
+                        .toList();
+
+        long verifiedRequiredDocuments =
+                requiredDocuments.stream()
+                        .filter(document ->
+                                document.getVerificationStatus()
+                                        == VerificationStatus.VERIFIED
+                        )
+                        .count();
+
+        long notApplicableRequiredDocuments =
+                requiredDocuments.stream()
+                        .filter(document ->
+                                document.getVerificationStatus()
+                                        == VerificationStatus.NOT_APPLICABLE
+                        )
+                        .count();
+
+        List<String> blockingDocumentTypes =
+                requiredDocuments.stream()
+                        .filter(document ->
+                                !isReadyStatus(
+                                        document.getVerificationStatus()
+                                )
+                        )
+                        .map(Document::getDocumentType)
+                        .sorted()
+                        .toList();
+
+        boolean allMandatoryDocumentsResolved =
+                !requiredDocuments.isEmpty()
+                        && blockingDocumentTypes.isEmpty();
+
+        return new DocumentReadinessResponse(
+                shipmentId,
+                documents.size(),
+                requiredDocuments.size(),
+                verifiedRequiredDocuments,
+                notApplicableRequiredDocuments,
+                blockingDocumentTypes.size(),
+                allMandatoryDocumentsResolved,
+                blockingDocumentTypes
+        );
     }
 
     @Override
@@ -188,8 +257,28 @@ public class DocumentServiceImpl implements DocumentService {
             return;
         }
 
-        documentAuditPublisher
-                .publishDocumentRejected(document);
+        if (
+                document.getVerificationStatus()
+                        == VerificationStatus.REJECTED
+        ) {
+            documentAuditPublisher
+                    .publishDocumentRejected(document);
+        }
+    }
+
+    private boolean isResolvedStatus(
+            VerificationStatus status
+    ) {
+        return status == VerificationStatus.VERIFIED
+                || status == VerificationStatus.REJECTED
+                || status == VerificationStatus.NOT_APPLICABLE;
+    }
+
+    private boolean isReadyStatus(
+            VerificationStatus status
+    ) {
+        return status == VerificationStatus.VERIFIED
+                || status == VerificationStatus.NOT_APPLICABLE;
     }
 
     private Document findDocument(Long id) {
@@ -200,5 +289,13 @@ public class DocumentServiceImpl implements DocumentService {
                                         + id
                         )
                 );
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        return value.trim();
     }
 }
