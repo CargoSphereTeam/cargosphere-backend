@@ -6,4 +6,7 @@ public interface ShipmentPaymentClient {
 
     List<ShipmentPaymentResponse>
     getPaymentsByShipmentId(Long shipmentId);
+
+    ShipmentPaymentSummaryResponse
+    getPaymentSummary(Long shipmentId);
 }

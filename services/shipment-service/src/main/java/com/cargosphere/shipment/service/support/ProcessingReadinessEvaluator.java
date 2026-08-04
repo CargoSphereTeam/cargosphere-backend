@@ -8,7 +8,7 @@ import com.cargosphere.shipment.entity.enums.CargoVerificationStatus;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.integration.container.ContainerAllocationResponse;
 import com.cargosphere.shipment.integration.document.ShipmentDocumentReadinessResponse;
-import com.cargosphere.shipment.integration.payment.ShipmentPaymentResponse;
+import com.cargosphere.shipment.integration.payment.ShipmentPaymentSummaryResponse;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -25,7 +25,7 @@ public class ProcessingReadinessEvaluator {
             List<CargoDetail> cargoDetails,
             List<CargoVerification> cargoVerifications,
             ShipmentDocumentReadinessResponse documentReadiness,
-            List<ShipmentPaymentResponse> payments
+            ShipmentPaymentSummaryResponse paymentSummary
     ) {
         Long shipmentId = shipment.getId();
 
@@ -50,7 +50,7 @@ public class ProcessingReadinessEvaluator {
         boolean paymentReady =
                 isPaymentReady(
                         shipmentId,
-                        payments
+                        paymentSummary
                 );
 
         boolean processingStageReady =
@@ -71,7 +71,8 @@ public class ProcessingReadinessEvaluator {
                         documentsReady,
                         paymentReady,
                         processingStageReady,
-                        documentReadiness
+                        documentReadiness,
+                        paymentSummary
                 );
 
         return ProcessingReadinessResponse.builder()
@@ -150,28 +151,64 @@ public class ProcessingReadinessEvaluator {
 
     public boolean isPaymentReady(
             Long shipmentId,
-            List<ShipmentPaymentResponse> payments
+            ShipmentPaymentSummaryResponse summary
     ) {
-        if (payments == null || payments.isEmpty()) {
+        if (summary == null) {
             return false;
         }
 
-        return payments.stream()
-                .anyMatch(payment ->
-                        payment != null
-                                && payment.id() != null
-                                && Objects.equals(
-                                payment.shipmentId(),
-                                shipmentId
-                        )
-                                && payment.amount() != null
-                                && payment.amount()
-                                .compareTo(BigDecimal.ZERO) > 0
-                                && "PAID".equalsIgnoreCase(
-                                payment.paymentStatus()
-                        )
-                                && payment.paidDate() != null
-                );
+        if (
+                !Objects.equals(
+                        summary.shipmentId(),
+                        shipmentId
+                )
+        ) {
+            return false;
+        }
+
+        if (summary.id() == null) {
+            return false;
+        }
+
+        if (
+                !"CONFIRMED".equalsIgnoreCase(
+                        summary.confirmationStatus()
+                )
+        ) {
+            return false;
+        }
+
+        if (!summary.paymentConfirmed()) {
+            return false;
+        }
+
+        if (summary.confirmedBy() == null) {
+            return false;
+        }
+
+        if (summary.confirmedAt() == null) {
+            return false;
+        }
+
+        if (
+                summary.finalAmount() == null
+                        || summary.finalAmount()
+                        .compareTo(BigDecimal.ZERO) <= 0
+        ) {
+            return false;
+        }
+
+        if (
+                summary.paidAmount() == null
+                        || summary.paidAmount()
+                        .compareTo(summary.finalAmount()) < 0
+        ) {
+            return false;
+        }
+
+        return summary.balanceAmount() != null
+                && summary.balanceAmount()
+                .compareTo(BigDecimal.ZERO) == 0;
     }
 
     private boolean hasConfirmedVerification(
@@ -203,7 +240,8 @@ public class ProcessingReadinessEvaluator {
             boolean documentsReady,
             boolean paymentReady,
             boolean processingStageReady,
-            ShipmentDocumentReadinessResponse documentReadiness
+            ShipmentDocumentReadinessResponse documentReadiness,
+            ShipmentPaymentSummaryResponse paymentSummary
     ) {
         List<String> reasons = new ArrayList<>();
 
@@ -246,7 +284,9 @@ public class ProcessingReadinessEvaluator {
 
         if (!paymentReady) {
             reasons.add(
-                    "At least one valid PAID payment is required"
+                    buildPaymentBlockingReason(
+                            paymentSummary
+                    )
             );
         }
 
@@ -257,5 +297,41 @@ public class ProcessingReadinessEvaluator {
         }
 
         return List.copyOf(reasons);
+    }
+
+    private String buildPaymentBlockingReason(
+            ShipmentPaymentSummaryResponse summary
+    ) {
+        if (summary == null) {
+            return "A shipment payment summary is required";
+        }
+
+        if (
+                !"CONFIRMED".equalsIgnoreCase(
+                        summary.confirmationStatus()
+                )
+                || !summary.paymentConfirmed()
+        ) {
+            return "Shipment payment summary must be confirmed";
+        }
+
+        if (
+                summary.balanceAmount() == null
+                        || summary.balanceAmount()
+                        .compareTo(BigDecimal.ZERO) != 0
+        ) {
+            return "Shipment payment balance must be zero";
+        }
+
+        if (
+                summary.paidAmount() == null
+                        || summary.finalAmount() == null
+                        || summary.paidAmount()
+                        .compareTo(summary.finalAmount()) < 0
+        ) {
+            return "Paid amount must cover the final shipment amount";
+        }
+
+        return "Shipment payment confirmation is incomplete";
     }
 }

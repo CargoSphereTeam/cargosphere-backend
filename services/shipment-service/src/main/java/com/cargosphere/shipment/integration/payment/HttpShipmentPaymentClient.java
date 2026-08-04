@@ -4,6 +4,7 @@ import com.cargosphere.shipment.exception.DownstreamServiceException;
 import com.cargosphere.shipment.security.CurrentJwtTokenProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -61,22 +62,97 @@ public class HttpShipmentPaymentClient
             return List.copyOf(response);
 
         } catch (RestClientResponseException exception) {
-            throw new DownstreamServiceException(
-                    SERVICE_NAME,
-                    "Payment-service rejected payment lookup for shipment ID "
-                            + shipmentId
-                            + " with status "
-                            + exception.getStatusCode(),
+            throw createRejectedException(
+                    shipmentId,
+                    "payment lookup",
                     exception
             );
 
         } catch (RestClientException exception) {
-            throw new DownstreamServiceException(
-                    SERVICE_NAME,
-                    "Payment-service is unavailable while checking shipment ID "
-                            + shipmentId,
+            throw createUnavailableException(
+                    shipmentId,
+                    "loading payments",
                     exception
             );
         }
+    }
+
+    @Override
+    public ShipmentPaymentSummaryResponse
+    getPaymentSummary(Long shipmentId) {
+
+        String token = tokenProvider.getTokenValue();
+
+        try {
+            return restClient
+                    .get()
+                    .uri(
+                            "/api/payments/shipments/"
+                                    + "{shipmentId}/payment-summary",
+                            shipmentId
+                    )
+                    .headers(headers ->
+                            headers.setBearerAuth(token)
+                    )
+                    .retrieve()
+                    .body(
+                            ShipmentPaymentSummaryResponse.class
+                    );
+
+        } catch (RestClientResponseException exception) {
+            if (
+                    exception.getStatusCode()
+                            == HttpStatus.NOT_FOUND
+            ) {
+                return null;
+            }
+
+            throw createRejectedException(
+                    shipmentId,
+                    "payment-summary lookup",
+                    exception
+            );
+
+        } catch (RestClientException exception) {
+            throw createUnavailableException(
+                    shipmentId,
+                    "loading payment summary",
+                    exception
+            );
+        }
+    }
+
+    private DownstreamServiceException
+    createRejectedException(
+            Long shipmentId,
+            String operation,
+            RestClientResponseException exception
+    ) {
+        return new DownstreamServiceException(
+                SERVICE_NAME,
+                "Payment-service rejected "
+                        + operation
+                        + " for shipment ID "
+                        + shipmentId
+                        + " with status "
+                        + exception.getStatusCode(),
+                exception
+        );
+    }
+
+    private DownstreamServiceException
+    createUnavailableException(
+            Long shipmentId,
+            String operation,
+            RestClientException exception
+    ) {
+        return new DownstreamServiceException(
+                SERVICE_NAME,
+                "Payment-service is unavailable while "
+                        + operation
+                        + " for shipment ID "
+                        + shipmentId,
+                exception
+        );
     }
 }
