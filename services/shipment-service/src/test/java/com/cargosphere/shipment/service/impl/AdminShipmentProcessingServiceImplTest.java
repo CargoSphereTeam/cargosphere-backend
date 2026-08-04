@@ -35,6 +35,7 @@ import com.cargosphere.shipment.integration.document.ShipmentDocumentReadinessRe
 import com.cargosphere.shipment.integration.document.ShipmentDocumentResponse;
 import com.cargosphere.shipment.integration.payment.ShipmentPaymentClient;
 import com.cargosphere.shipment.integration.payment.ShipmentPaymentResponse;
+import com.cargosphere.shipment.integration.payment.ShipmentPaymentSummaryResponse;
 import com.cargosphere.shipment.mapper.EbillSnapshotMapper;
 import com.cargosphere.shipment.mapper.ShipmentEventMapper;
 import com.cargosphere.shipment.repository.CargoDetailRepository;
@@ -681,8 +682,10 @@ class AdminShipmentProcessingServiceImplTest {
                 );
 
         when(shipmentPaymentClient
-                .getPaymentsByShipmentId(10L))
-                .thenReturn(List.of(payment));
+                .getPaymentSummary(10L))
+                .thenReturn(
+                        readyPaymentSummary()
+                );
 
         ProcessingReadinessResponse response =
                 service.getProcessingReadiness(10L);
@@ -906,6 +909,12 @@ class AdminShipmentProcessingServiceImplTest {
         when(shipmentPaymentClient
                 .getPaymentsByShipmentId(10L))
                 .thenReturn(List.of(payment));
+
+        when(shipmentPaymentClient
+                .getPaymentSummary(10L))
+                .thenReturn(
+                        readyPaymentSummary()
+                );
 
         when(shipmentEventRepository
                 .findByShipment_IdOrderByEventTimeDesc(10L))
@@ -1135,6 +1144,12 @@ class AdminShipmentProcessingServiceImplTest {
         when(shipmentPaymentClient
                 .getPaymentsByShipmentId(10L))
                 .thenReturn(List.of(payment));
+
+        when(shipmentPaymentClient
+                .getPaymentSummary(10L))
+                .thenReturn(
+                        readyPaymentSummary()
+                );
 
         when(shipmentEventRepository
                 .findByShipment_IdOrderByEventTimeDesc(10L))
@@ -1488,7 +1503,7 @@ class AdminShipmentProcessingServiceImplTest {
                                 + "All shipment cargo items must be confirmed; "
                                 + "Required documents are unresolved: "
                                 + "COMMERCIAL_INVOICE, PACKING_LIST; "
-                                + "At least one valid PAID payment is required"
+                                + "A shipment payment summary is required"
                 );
 
         verifyNoInteractions(
@@ -1749,10 +1764,6 @@ class AdminShipmentProcessingServiceImplTest {
                         blockedDocumentReadiness()
                 );
 
-        when(shipmentPaymentClient
-                .getPaymentsByShipmentId(10L))
-                .thenReturn(List.of());
-
         ProcessingReadinessResponse response =
                 service.getProcessingReadiness(10L);
 
@@ -1777,7 +1788,7 @@ class AdminShipmentProcessingServiceImplTest {
                         "All shipment cargo items must be confirmed",
                         "Required documents are unresolved: "
                                 + "COMMERCIAL_INVOICE, PACKING_LIST",
-                        "At least one valid PAID payment is required"
+                        "A shipment payment summary is required"
                 );
     }
     @Test
@@ -2056,8 +2067,10 @@ class AdminShipmentProcessingServiceImplTest {
                 .thenReturn(Optional.of(shipment));
 
         when(shipmentPaymentClient
-                .getPaymentsByShipmentId(10L))
-                .thenReturn(List.of(payment));
+                .getPaymentSummary(10L))
+                .thenReturn(
+                        readyPaymentSummary()
+                );
 
         when(shipmentRepository.save(shipment))
                 .thenReturn(shipment);
@@ -2091,7 +2104,7 @@ class AdminShipmentProcessingServiceImplTest {
                 );
 
         verify(shipmentPaymentClient)
-                .getPaymentsByShipmentId(10L);
+                .getPaymentSummary(10L);
 
         verify(shipmentRepository)
                 .save(shipment);
@@ -2217,8 +2230,10 @@ class AdminShipmentProcessingServiceImplTest {
                 .thenReturn(Optional.of(shipment));
 
         when(shipmentPaymentClient
-                .getPaymentsByShipmentId(10L))
-                .thenReturn(List.of(payment));
+                .getPaymentSummary(10L))
+                .thenReturn(
+                        draftPaymentSummary()
+                );
 
         assertThatThrownBy(() ->
                 service.continueProcessing(10L)
@@ -2227,7 +2242,7 @@ class AdminShipmentProcessingServiceImplTest {
                         InvalidShipmentOperationException.class
                 )
                 .hasMessage(
-                        "At least one valid PAID payment is required "
+                        "Shipment payment summary is not confirmed "
                                 + "before continuing shipment 10"
                 );
 
@@ -2280,7 +2295,7 @@ class AdminShipmentProcessingServiceImplTest {
                 .getDocumentReadiness(any());
 
         verify(shipmentPaymentClient, never())
-                .getPaymentsByShipmentId(any());
+                .getPaymentSummary(any());
     }
     @Test
     void shouldPublishAuditAfterSuccessfulProcessingTransition() {
@@ -2339,6 +2354,72 @@ class AdminShipmentProcessingServiceImplTest {
                         ProcessingStage.CONTAINER_ALLOCATION
                 );
     }
+    private ShipmentPaymentSummaryResponse
+    readyPaymentSummary() {
+        return new ShipmentPaymentSummaryResponse(
+                1L,
+                10L,
+                new BigDecimal("12500.00"),
+                new BigDecimal("10000.00"),
+                new BigDecimal("1000.00"),
+                new BigDecimal("1500.00"),
+                BigDecimal.ZERO,
+                new BigDecimal("12500.00"),
+                new BigDecimal("12500.00"),
+                BigDecimal.ZERO,
+                "INR",
+                "UPI",
+                "CONFIRMED",
+                5L,
+                LocalDateTime.of(
+                        2026,
+                        8,
+                        2,
+                        10,
+                        0
+                ),
+                "Payment confirmed",
+                true,
+                LocalDateTime.of(
+                        2026,
+                        8,
+                        2,
+                        10,
+                        0
+                )
+        );
+    }
+
+    private ShipmentPaymentSummaryResponse
+    draftPaymentSummary() {
+        return new ShipmentPaymentSummaryResponse(
+                1L,
+                10L,
+                new BigDecimal("12500.00"),
+                new BigDecimal("10000.00"),
+                new BigDecimal("1000.00"),
+                new BigDecimal("1500.00"),
+                BigDecimal.ZERO,
+                new BigDecimal("12500.00"),
+                new BigDecimal("5000.00"),
+                new BigDecimal("7500.00"),
+                "INR",
+                "UPI",
+                "DRAFT",
+                null,
+                null,
+                "Payment pending",
+                false,
+                LocalDateTime.of(
+                        2026,
+                        8,
+                        2,
+                        9,
+                        0
+                )
+        );
+    }
+
     private ShipmentDocumentReadinessResponse
     readyDocumentReadiness() {
         return new ShipmentDocumentReadinessResponse(

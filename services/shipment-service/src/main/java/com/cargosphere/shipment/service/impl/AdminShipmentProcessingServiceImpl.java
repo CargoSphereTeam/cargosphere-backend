@@ -30,6 +30,7 @@ import com.cargosphere.shipment.integration.document.ShipmentDocumentReadinessRe
 import com.cargosphere.shipment.integration.document.ShipmentDocumentResponse;
 import com.cargosphere.shipment.integration.payment.ShipmentPaymentClient;
 import com.cargosphere.shipment.integration.payment.ShipmentPaymentResponse;
+import com.cargosphere.shipment.integration.payment.ShipmentPaymentSummaryResponse;
 import com.cargosphere.shipment.mapper.EbillSnapshotMapper;
 import com.cargosphere.shipment.mapper.ShipmentEventMapper;
 import com.cargosphere.shipment.repository.CargoDetailRepository;
@@ -261,9 +262,9 @@ public class AdminShipmentProcessingServiceImpl
                 shipmentDocumentClient
                         .getDocumentReadiness(shipmentId);
 
-        List<ShipmentPaymentResponse> payments =
+        ShipmentPaymentSummaryResponse paymentSummary =
                 shipmentPaymentClient
-                        .getPaymentsByShipmentId(shipmentId);
+                        .getPaymentSummary(shipmentId);
 
         return processingReadinessEvaluator.evaluate(
                 shipment,
@@ -271,7 +272,7 @@ public class AdminShipmentProcessingServiceImpl
                 cargoDetails,
                 cargoVerifications,
                 documentReadiness,
-                payments
+                paymentSummary
         );
     }
 
@@ -313,6 +314,10 @@ public class AdminShipmentProcessingServiceImpl
                 shipmentPaymentClient
                         .getPaymentsByShipmentId(shipmentId);
 
+        ShipmentPaymentSummaryResponse paymentSummary =
+                shipmentPaymentClient
+                        .getPaymentSummary(shipmentId);
+
         List<ShipmentEvent> shipmentEvents =
                 shipmentEventRepository
                         .findByShipment_IdOrderByEventTimeDesc(
@@ -326,7 +331,7 @@ public class AdminShipmentProcessingServiceImpl
                         cargoDetails,
                         cargoVerifications,
                         documentReadiness,
-                        payments
+                        paymentSummary
                 );
 
         return ebillSnapshotMapper.toPreview(
@@ -395,6 +400,10 @@ public class AdminShipmentProcessingServiceImpl
                 shipmentPaymentClient
                         .getPaymentsByShipmentId(shipmentId);
 
+        ShipmentPaymentSummaryResponse paymentSummary =
+                shipmentPaymentClient
+                        .getPaymentSummary(shipmentId);
+
         List<ShipmentEvent> shipmentEvents =
                 shipmentEventRepository
                         .findByShipment_IdOrderByEventTimeDesc(
@@ -408,7 +417,7 @@ public class AdminShipmentProcessingServiceImpl
                         cargoDetails,
                         cargoVerifications,
                         documentReadiness,
-                        payments
+                        paymentSummary
                 );
 
         validateEbillReadiness(
@@ -543,32 +552,6 @@ public class AdminShipmentProcessingServiceImpl
                 );
     }
 
-    private boolean isPaymentReady(
-            Long shipmentId,
-            List<ShipmentPaymentResponse> payments
-    ) {
-        if (payments == null || payments.isEmpty()) {
-            return false;
-        }
-
-        return payments.stream()
-                .anyMatch(payment ->
-                        payment != null
-                                && payment.id() != null
-                                && Objects.equals(
-                                payment.shipmentId(),
-                                shipmentId
-                        )
-                                && payment.amount() != null
-                                && payment.amount()
-                                .compareTo(BigDecimal.ZERO) > 0
-                                && "PAID".equalsIgnoreCase(
-                                payment.paymentStatus()
-                        )
-                                && payment.paidDate() != null
-                );
-    }
-
     private ProcessingStage determineNextProcessingStage(
             Long shipmentId,
             ProcessingStage currentStage
@@ -680,21 +663,45 @@ public class AdminShipmentProcessingServiceImpl
     private ProcessingStage continueAfterPaymentConfirmation(
             Long shipmentId
     ) {
-        List<ShipmentPaymentResponse> payments =
+        ShipmentPaymentSummaryResponse paymentSummary =
                 shipmentPaymentClient
-                        .getPaymentsByShipmentId(
-                                shipmentId
-                        );
+                        .getPaymentSummary(shipmentId);
 
         if (
-                !isPaymentReady(
-                        shipmentId,
-                        payments
-                )
+                !processingReadinessEvaluator
+                        .isPaymentReady(
+                                shipmentId,
+                                paymentSummary
+                        )
         ) {
+            String reason;
+
+            if (paymentSummary == null) {
+                reason =
+                        "Shipment payment summary does not exist";
+            } else if (
+                    !"CONFIRMED".equalsIgnoreCase(
+                            paymentSummary.confirmationStatus()
+                    )
+                            || !paymentSummary.paymentConfirmed()
+            ) {
+                reason =
+                        "Shipment payment summary is not confirmed";
+            } else if (
+                    paymentSummary.balanceAmount() == null
+                            || paymentSummary.balanceAmount()
+                            .compareTo(BigDecimal.ZERO) != 0
+            ) {
+                reason =
+                        "Shipment payment balance must be zero";
+            } else {
+                reason =
+                        "Shipment payment confirmation is incomplete";
+            }
+
             throw new InvalidShipmentOperationException(
-                    "At least one valid PAID payment is required "
-                            + "before continuing shipment "
+                    reason
+                            + " before continuing shipment "
                             + shipmentId
             );
         }
