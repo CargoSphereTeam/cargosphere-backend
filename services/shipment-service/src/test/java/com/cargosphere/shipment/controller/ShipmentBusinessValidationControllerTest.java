@@ -8,7 +8,6 @@ import com.cargosphere.shipment.entity.enums.ShipmentStatus;
 import com.cargosphere.shipment.entity.enums.ShipmentType;
 import com.cargosphere.shipment.exception.InvalidShipmentOperationException;
 import com.cargosphere.shipment.service.ShipmentService;
-import com.cargosphere.shipment.config.CorsConfig;
 import com.cargosphere.shipment.config.SecurityConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -34,7 +33,6 @@ import org.springframework.context.annotation.Import;
 
 @WebMvcTest(ShipmentController.class)
 @Import({
-        CorsConfig.class,
         SecurityConfig.class
 })
 @WithMockUser(
