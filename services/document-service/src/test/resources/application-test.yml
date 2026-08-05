@@ -1,4 +1,8 @@
 spring:
+  cloud:
+    discovery:
+      enabled: false
+
   datasource:
     url: ${DOCUMENT_TEST_DB_URL}
     username: ${DOCUMENT_TEST_DB_USERNAME}
@@ -19,6 +23,12 @@ spring:
     default-schema: document_schema
     schemas: document_schema
     locations: classpath:db/migration
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
 
 app:
   jwt:
