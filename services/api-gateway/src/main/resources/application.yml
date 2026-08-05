@@ -1,4 +1,4 @@
-﻿server:
+server:
   port: 8080
 
 spring:
@@ -18,7 +18,7 @@ spring:
             - id: shipment-service-route
               uri: lb://shipment-service
               predicates:
-                - Path=/api/shipments/**
+                - Path=/api/shipments/**,/api/admin/shipments/**
 
             - id: container-types-route
               uri: lb://container-service
