@@ -36,10 +36,22 @@ management:
     health:
       show-details: never
 
+eureka:
+  client:
+    enabled: true
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+
+  instance:
+    prefer-ip-address: true
+
 app:
   jwt:
     secret: ${JWT_SECRET}
     issuer: ${JWT_ISSUER:cargosphere-auth-service}
+
   audit-client:
     enabled: ${AUDIT_CLIENT_ENABLED:true}
     base-url: ${AUDIT_SERVICE_URL:http://localhost:8086}
