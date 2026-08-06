@@ -2,8 +2,6 @@ package com.cargosphere.payment.service.impl;
 
 
 import com.cargosphere.payment.exception.PaymentAlreadyConfirmedException;
-import java.time.LocalDateTime;
-import com.cargosphere.payment.exception.PaymentConfirmationNotAllowedException;
 import com.cargosphere.payment.exception.InvalidPaymentAmountException;
 import com.cargosphere.payment.dto.ShipmentPaymentSummaryRequest;
 import com.cargosphere.payment.dto.ShipmentPaymentSummaryResponse;
@@ -344,54 +342,24 @@ public PaymentResponse refundPayment(
             );
         }
         if (isAlreadyConfirmed(summary)) {
-
-            if (summary.getConfirmedBy() != null
-                    && Objects.equals(
-                    summary.getConfirmedBy(),
-                    adminId
-            )
-                    && summary.getFinalAmount().compareTo(finalAmount) == 0
-                    && summary.getPaidAmount().compareTo(
-                    request.getPaidAmount()
-            ) == 0) {
-
-                return shipmentPaymentSummaryMapper.toResponse(
-                        summary
-                );
-            }
-
             throw new PaymentAlreadyConfirmedException(
                     "Payment summary has already been confirmed."
             );
         }
-
-        validateConfirmationAllowed(
-                balanceAmount
-        );
-
         summary.setConfirmationStatus(
-                ConfirmationStatus.CONFIRMED
+                ConfirmationStatus.APPROVED
         );
+        summary.setPaidAmount(BigDecimal.ZERO.setScale(2));
+        summary.setBalanceAmount(finalAmount);
+        summary.setConfirmedBy(null);
+        summary.setConfirmedAt(null);
 
-        summary.setConfirmedBy(
-                adminId
-        );
-
-        summary.setConfirmedAt(
-                LocalDateTime.now()
-        );
-
-        ShipmentPaymentSummary confirmedSummary =
+        ShipmentPaymentSummary approvedSummary =
                 shipmentPaymentSummaryRepository.save(
                         summary
                 );
-
-        paymentAuditPublisher.publishShipmentPaymentConfirmed(
-                confirmedSummary
-        );
-
         return shipmentPaymentSummaryMapper.toResponse(
-                confirmedSummary
+                approvedSummary
         );
     }
 
@@ -625,17 +593,5 @@ public PaymentResponse refundPayment(
         return summary.getConfirmationStatus()
                 == ConfirmationStatus.CONFIRMED;
     }
-
-    private void validateConfirmationAllowed(
-            BigDecimal balanceAmount
-    ) {
-
-        if (balanceAmount.compareTo(BigDecimal.ZERO) != 0) {
-            throw new PaymentConfirmationNotAllowedException(
-                    "Payment cannot be confirmed until the balance amount is zero."
-            );
-        }
-    }
-
 
 }

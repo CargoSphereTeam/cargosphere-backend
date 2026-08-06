@@ -27,6 +27,18 @@ spring:
     create-schemas: true
     locations: classpath:db/migration
 
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SMTP_AUTH:true}
+          starttls:
+            enable: ${SMTP_STARTTLS:true}
+
 management:
   endpoints:
     web:
@@ -55,6 +67,18 @@ app:
     api-key: ${INTERNAL_AUDIT_API_KEY:}
     connect-timeout: ${AUDIT_CONNECT_TIMEOUT:PT2S}
     read-timeout: ${AUDIT_READ_TIMEOUT:PT3S}
+
+  razorpay:
+    key-id: ${RAZORPAY_KEY_ID:}
+    key-secret: ${RAZORPAY_KEY_SECRET:}
+    api-url: ${RAZORPAY_API_URL:https://api.razorpay.com/v1}
+
+  payment-mail:
+    enabled: ${PAYMENT_MAIL_ENABLED:false}
+    from: ${SMTP_FROM:${SMTP_USERNAME:}}
+    frontend-url: ${FRONTEND_URL:http://localhost:5173}
+    shipment-service-url: ${SHIPMENT_SERVICE_URL:http://localhost:8082}
+    auth-service-url: ${AUTH_SERVICE_URL:http://localhost:8081}
 
 springdoc:
   api-docs:

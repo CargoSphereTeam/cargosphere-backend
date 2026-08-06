@@ -11,6 +11,8 @@ import com.cargosphere.payment.entity.enums.PaymentType;
 import com.cargosphere.payment.exception.GlobalExceptionHandler;
 import com.cargosphere.payment.security.JwtUserIdExtractor;
 import com.cargosphere.payment.service.PaymentService;
+import com.cargosphere.payment.service.RazorpayCheckoutService;
+import com.cargosphere.payment.service.PaymentNotificationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -54,6 +56,12 @@ class PaymentControllerTest {
 
     @MockitoBean
     private PaymentService paymentService;
+
+    @MockitoBean
+    private RazorpayCheckoutService razorpayCheckoutService;
+
+    @MockitoBean
+    private PaymentNotificationService paymentNotificationService;
 
     @MockitoBean
     private JwtDecoder jwtDecoder;

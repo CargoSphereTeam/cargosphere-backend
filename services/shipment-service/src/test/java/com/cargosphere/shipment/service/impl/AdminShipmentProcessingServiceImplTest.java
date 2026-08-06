@@ -23,6 +23,7 @@ import com.cargosphere.shipment.entity.ShipmentEvent;
 import com.cargosphere.shipment.entity.enums.CargoVerificationStatus;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.entity.enums.ShipmentEventType;
+import com.cargosphere.shipment.entity.enums.ShipmentStatus;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
 import com.cargosphere.shipment.exception.InvalidShipmentOperationException;
 import com.cargosphere.shipment.exception.ResourceNotFoundException;
@@ -173,6 +174,9 @@ class AdminShipmentProcessingServiceImplTest {
                 .isEqualTo(
                         ProcessingStage.CONTAINER_ALLOCATION
                 );
+
+        assertThat(shipment.getStatus())
+                .isEqualTo(ShipmentStatus.BOOKED);
 
         assertThat(shipment.getProcessingStartedAt())
                 .isNotNull();
@@ -2460,6 +2464,7 @@ class AdminShipmentProcessingServiceImplTest {
                 .clientUserId(100L)
                 .originLocation("Mumbai")
                 .destinationLocation("Pune")
+                .status(ShipmentStatus.CREATED)
                 .processingStage(processingStage)
                 .build();
     }

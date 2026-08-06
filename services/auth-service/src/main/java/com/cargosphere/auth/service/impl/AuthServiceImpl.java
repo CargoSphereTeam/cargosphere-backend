@@ -7,6 +7,7 @@ import com.cargosphere.auth.dto.LoginResponse;
 import com.cargosphere.auth.dto.RegisterRequest;
 import com.cargosphere.auth.dto.RegisterResponse;
 import com.cargosphere.auth.dto.UserResponse;
+import com.cargosphere.auth.dto.UpdateProfileRequest;
 import com.cargosphere.auth.entity.Role;
 import com.cargosphere.auth.entity.User;
 import com.cargosphere.auth.entity.UserStatus;
@@ -206,6 +207,29 @@ public class AuthServiceImpl
                         );
 
         return AuthMapper.toUserResponse(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserResponse getProfile(Long userId) {
+        return getUserById(userId);
+    }
+
+    @Override
+    public UserResponse updateProfile(
+            Long userId,
+            UpdateProfileRequest request
+    ) {
+        User user = userRepository
+                .findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "User not found with id: " + userId
+                ));
+
+        user.setFullName(request.fullName().trim());
+        user.setPhoneNumber(normalizePhoneNumber(request.phoneNumber()));
+
+        return AuthMapper.toUserResponse(userRepository.save(user));
     }
 
     private void publishLoginFailure(

@@ -8,8 +8,12 @@ import com.cargosphere.payment.dto.ErrorResponse;
 import com.cargosphere.payment.dto.PaymentResponse;
 import com.cargosphere.payment.dto.RefundPaymentRequest;
 import com.cargosphere.payment.dto.UpdatePaymentStatusRequest;
+import com.cargosphere.payment.dto.RazorpayOrderResponse;
+import com.cargosphere.payment.dto.RazorpayVerificationRequest;
 import com.cargosphere.payment.security.JwtUserIdExtractor;
 import com.cargosphere.payment.service.PaymentService;
+import com.cargosphere.payment.service.RazorpayCheckoutService;
+import com.cargosphere.payment.service.PaymentNotificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -51,7 +55,53 @@ import java.util.List;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final RazorpayCheckoutService razorpayCheckoutService;
+    private final PaymentNotificationService paymentNotificationService;
     private final JwtUserIdExtractor jwtUserIdExtractor;
+
+    @PostMapping("/razorpay/shipments/{shipmentId}/orders")
+    @PreAuthorize("hasRole('CLIENT')")
+    public ResponseEntity<RazorpayOrderResponse> createRazorpayOrder(
+            @PathVariable @Positive Long shipmentId,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        Long userId = jwtUserIdExtractor.extractUserId(jwt);
+        return ResponseEntity.ok(
+                razorpayCheckoutService.createOrder(shipmentId, userId)
+        );
+    }
+
+    @GetMapping("/razorpay/shipments/{shipmentId}/status")
+    @PreAuthorize("hasRole('CLIENT')")
+    public ResponseEntity<ShipmentPaymentSummaryResponse> getRazorpayPaymentStatus(
+            @PathVariable @Positive Long shipmentId
+    ) {
+        return ResponseEntity.ok(
+                paymentService.getShipmentPaymentSummary(shipmentId)
+        );
+    }
+
+    @PostMapping("/razorpay/shipments/{shipmentId}/verify")
+    @PreAuthorize("hasRole('CLIENT')")
+    public ResponseEntity<ShipmentPaymentSummaryResponse> verifyRazorpayPayment(
+            @PathVariable @Positive Long shipmentId,
+            @Valid @RequestBody RazorpayVerificationRequest request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        Long userId = jwtUserIdExtractor.extractUserId(jwt);
+        ShipmentPaymentSummaryResponse response =
+                razorpayCheckoutService.verifyPayment(
+                        shipmentId,
+                        request,
+                        userId
+                );
+        paymentNotificationService.sendPaymentReceipt(
+                shipmentId,
+                response,
+                jwt.getTokenValue()
+        );
+        return ResponseEntity.ok(response);
+    }
 
     @Operation(
             summary = "Create a payment",
@@ -603,12 +653,20 @@ public class PaymentController {
         Long adminId =
                 jwtUserIdExtractor.extractUserId(jwt);
 
-        return ResponseEntity.ok(
+        ShipmentPaymentSummaryResponse response =
                 paymentService.saveShipmentPaymentSummary(
                         shipmentId,
                         request,
                         adminId
-                )
-        );
+                );
+        if (response.getConfirmationStatus()
+                == com.cargosphere.payment.entity.enums.ConfirmationStatus.APPROVED) {
+            paymentNotificationService.sendPaymentRequest(
+                    shipmentId,
+                    response,
+                    jwt.getTokenValue()
+            );
+        }
+        return ResponseEntity.ok(response);
     }
 }

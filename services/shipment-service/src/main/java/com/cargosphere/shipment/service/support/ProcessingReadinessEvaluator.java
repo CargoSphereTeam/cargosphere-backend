@@ -55,7 +55,9 @@ public class ProcessingReadinessEvaluator {
 
         boolean processingStageReady =
                 shipment.getProcessingStage()
-                        == ProcessingStage.READY_FOR_EBILL;
+                        == ProcessingStage.READY_FOR_EBILL
+                        || shipment.getProcessingStage()
+                        == ProcessingStage.EBILL_GENERATED;
 
         boolean ebillReady =
                 containerReady

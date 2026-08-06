@@ -18,6 +18,7 @@ import com.cargosphere.shipment.entity.Shipment;
 import com.cargosphere.shipment.entity.ShipmentEvent;
 import com.cargosphere.shipment.entity.enums.ProcessingStage;
 import com.cargosphere.shipment.entity.enums.ShipmentEventType;
+import com.cargosphere.shipment.entity.enums.ShipmentStatus;
 import com.cargosphere.shipment.exception.InvalidProcessingStageException;
 import com.cargosphere.shipment.exception.InvalidShipmentOperationException;
 import com.cargosphere.shipment.exception.ResourceNotFoundException;
@@ -122,6 +123,10 @@ public class AdminShipmentProcessingServiceImpl
         shipment.setProcessingStartedAt(
                 OffsetDateTime.now(ZoneOffset.UTC)
         );
+
+        if (shipment.getStatus() == ShipmentStatus.CREATED) {
+            shipment.setStatus(ShipmentStatus.BOOKED);
+        }
 
         Shipment savedShipment =
                 shipmentRepository.save(shipment);

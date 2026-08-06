@@ -89,6 +89,10 @@ services:
     environment:
       EUREKA_SERVER_URL: http://service-registry:8761/eureka/
       AUDIT_SERVICE_URL: http://audit-service:8086
+      AUTH_SERVICE_URL: http://auth-service:8081
+      CONTAINER_SERVICE_URL: http://container-service:8083
+      DOCUMENT_SERVICE_URL: http://document-service:8084
+      PAYMENT_SERVICE_URL: http://payment-service:8085
     depends_on:
       service-registry:
         condition: service_healthy
@@ -176,6 +180,8 @@ services:
     environment:
       EUREKA_SERVER_URL: http://service-registry:8761/eureka/
       AUDIT_SERVICE_URL: http://audit-service:8086
+      SHIPMENT_SERVICE_URL: http://shipment-service:8082
+      AUTH_SERVICE_URL: http://auth-service:8081
     depends_on:
       service-registry:
         condition: service_healthy
