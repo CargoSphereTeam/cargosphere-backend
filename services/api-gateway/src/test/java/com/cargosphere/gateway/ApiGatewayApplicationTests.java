@@ -54,12 +54,18 @@ class ApiGatewayApplicationTests {
                 "lb://auth-service",
                 "/api/auth/**"
         );
-
         assertRoute(
                 routes,
                 "shipment-service-route",
                 "lb://shipment-service",
                 "/api/shipments/**"
+        );
+
+        assertRoute(
+                routes,
+                "shipment-service-route",
+                "lb://shipment-service",
+                "/api/admin/shipments/**"
         );
 
         assertRoute(
