@@ -107,91 +107,90 @@ class AuditLogRepositoryTest {
         assertNotNull(savedAuditLog.getCreatedAt());
     }
 
-   @Test
-void findAllShouldReturnNewestRecordsFirst() {
+    @Test
+    void findAllShouldReturnNewestRecordsFirst() {
+        AuditLog oldLog =
+                auditLogRepository.save(
+                        createAuditLog(
+                                101L,
+                                AuditAction.PAYMENT_CREATED,
+                                AuditEntityType.PAYMENT,
+                                "PAY-OLD",
+                                "payment-service",
+                                "REQ-ORDER-OLD",
+                                LocalDateTime.of(
+                                        2026,
+                                        7,
+                                        25,
+                                        10,
+                                        0
+                                )
+                        )
+                );
 
-    AuditLog oldLog =
-            auditLogRepository.save(
-                    createAuditLog(
-                            101L,
-                            AuditAction.PAYMENT_CREATED,
-                            AuditEntityType.PAYMENT,
-                            "PAY-OLD",
-                            "payment-service",
-                            "REQ-ORDER-OLD",
-                            LocalDateTime.of(
-                                    2026,
-                                    7,
-                                    25,
-                                    10,
-                                    0
-                            )
-                    )
-            );
+        AuditLog newLog =
+                auditLogRepository.save(
+                        createAuditLog(
+                                101L,
+                                AuditAction.PAYMENT_REFUNDED,
+                                AuditEntityType.PAYMENT,
+                                "PAY-NEW",
+                                "payment-service",
+                                "REQ-ORDER-NEW",
+                                LocalDateTime.of(
+                                        2026,
+                                        7,
+                                        25,
+                                        11,
+                                        0
+                                )
+                        )
+                );
 
-    AuditLog newLog =
-            auditLogRepository.save(
-                    createAuditLog(
-                            101L,
-                            AuditAction.PAYMENT_REFUNDED,
-                            AuditEntityType.PAYMENT,
-                            "PAY-NEW",
-                            "payment-service",
-                            "REQ-ORDER-NEW",
-                            LocalDateTime.of(
-                                    2026,
-                                    7,
-                                    25,
-                                    11,
-                                    0
-                            )
-                    )
-            );
+        auditLogRepository.flush();
 
-    auditLogRepository.flush();
+        Page<AuditLog> newResult =
+                auditLogRepository
+                        .findByRequestIdOrderByCreatedAtDesc(
+                                "REQ-ORDER-NEW",
+                                PageRequest.of(0, 10)
+                        );
 
-    Page<AuditLog> newResult =
-            auditLogRepository
-                    .findByRequestIdOrderByCreatedAtDesc(
-                            "REQ-ORDER-NEW",
-                            PageRequest.of(0, 10)
-                    );
+        Page<AuditLog> oldResult =
+                auditLogRepository
+                        .findByRequestIdOrderByCreatedAtDesc(
+                                "REQ-ORDER-OLD",
+                                PageRequest.of(0, 10)
+                        );
 
-    Page<AuditLog> oldResult =
-            auditLogRepository
-                    .findByRequestIdOrderByCreatedAtDesc(
-                            "REQ-ORDER-OLD",
-                            PageRequest.of(0, 10)
-                    );
+        assertEquals(1, newResult.getTotalElements());
+        assertEquals(1, oldResult.getTotalElements());
 
-    assertEquals(1, newResult.getTotalElements());
-    assertEquals(1, oldResult.getTotalElements());
+        assertEquals(
+                newLog.getId(),
+                newResult.getContent()
+                        .get(0)
+                        .getId()
+        );
 
-    assertEquals(
-            newLog.getId(),
-            newResult.getContent()
-                    .get(0)
-                    .getId()
-    );
+        assertEquals(
+                oldLog.getId(),
+                oldResult.getContent()
+                        .get(0)
+                        .getId()
+        );
 
-    assertEquals(
-            oldLog.getId(),
-            oldResult.getContent()
-                    .get(0)
-                    .getId()
-    );
-
-    assertTrue(
-            newResult.getContent()
-                    .get(0)
-                    .getCreatedAt()
-                    .isAfter(
-                            oldResult.getContent()
-                                    .get(0)
-                                    .getCreatedAt()
-                    )
-    );
-}
+        assertTrue(
+                newResult.getContent()
+                        .get(0)
+                        .getCreatedAt()
+                        .isAfter(
+                                oldResult.getContent()
+                                        .get(0)
+                                        .getCreatedAt()
+                        )
+        );
+    }
 
     @Test
     void findByActorUserIdShouldReturnMatchingLogs() {
